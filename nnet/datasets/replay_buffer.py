@@ -53,6 +53,7 @@ class ReplayBuffer(datasets.Dataset):
         self.last_save_traj_index = 0
         self.buffer_dir = os.path.join(root, self.buffer_name)
         self.save_trajectories = save_trajectories
+        self.retrieval = None
 
         # Create Buffer Dir
         if self.save_trajectories and not os.path.isdir(self.buffer_dir):
@@ -68,13 +69,28 @@ class ReplayBuffer(datasets.Dataset):
         return { 
             "traj_index": self.traj_index,
             "num_steps": self.num_steps,
-            "buffer_keys": list(self.ram_buffer.keys())
+            "buffer_keys": list(self.ram_buffer.keys()),
+            **({"retrieval": self.retrieval.state_dict()} if self.retrieval is not None else {})
         }
     
     def load_state_dict(self, state_dict):
         self.traj_index.fill_(state_dict.pop("traj_index"))
         self.num_steps.fill_(state_dict.pop("num_steps"))
         self.load(state_dict.pop("buffer_keys"))
+        if self.retrieval is not None:
+            self.streams.clear()
+            self.retrieval.restore(state_dict.get("retrieval"))
+
+    def enable_retrieval(self, num_envs):
+        from .retrieval_replay import RetrievalReplay
+        self.retrieval = RetrievalReplay(self, num_envs)
+        self.collate_fn = utils.CollateFn(
+            inputs_params=[{"axis": axis} for axis in range(7)], targets_params=[])
+        if self.ram_buffer:
+            self.retrieval.restore()
+
+    def retrieval_view(self):
+        return self.retrieval
 
     def save(self):
 
@@ -117,6 +133,8 @@ class ReplayBuffer(datasets.Dataset):
             # Pop oldest Episode
             oldest_episode_id = (self.traj_index - self.num_steps).item()
             self.ram_buffer.pop(oldest_episode_id)
+            if self.retrieval is not None:
+                self.retrieval.remove_window(oldest_episode_id)
 
             # Update Number of steps
             self.num_steps -= 1
@@ -150,6 +168,8 @@ class ReplayBuffer(datasets.Dataset):
 
         # Add to ram buffer (using tensor instead of int as key will replace instead of adding)
         self.ram_buffer[self.traj_index.item()] = traj
+        if self.retrieval is not None:
+            self.retrieval.add_window(self.traj_index.item(), sample_id, traj)
 
         # Update Index
         self.traj_index += 1
@@ -180,5 +200,8 @@ class ReplayBuffer(datasets.Dataset):
 
         # Stack elts
         traj = [torch.stack(elt, axis=0) for elt in traj]
+
+        if self.retrieval is not None:
+            traj.append(torch.tensor(self.retrieval.windows[traj_id], dtype=torch.int64))
 
         return traj

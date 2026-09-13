@@ -109,6 +109,10 @@ class TWISTER(models.Model):
         self.config.pre_fill_steps = 100 # pre_fill_steps in number of buffer samples
         self.config.load_replay_buffer_state_dict = True # Load ReplayBuffer saved state dict from checkpoint
 
+        # Optional retrieval; disabled preserves the original execution and RNG.
+        self.config.retrieval_enabled = False
+        self.config.retrieval = {}
+
         # Return Norm
         self.config.return_norm_decay = 0.99
         self.config.return_norm_limit = 1.0
@@ -193,6 +197,8 @@ class TWISTER(models.Model):
 
         # Config asserts
         assert self.config.att_context_left <= self.config.L
+        if type(self.config.retrieval_enabled) is not bool:
+            raise ValueError("retrieval_enabled must be a JSON boolean")
 
         # Create Training Envs
         self.env = envs.wrappers.BatchEnv([
@@ -300,6 +306,14 @@ class TWISTER(models.Model):
         # Critic Model
         self.critic_model = self.CriticModel(outer=self)
 
+        self.retrieval = None
+        if self.config.retrieval_enabled:
+            from .twister_retrieval import TWISTERRetrieval
+            self.retrieval = TWISTERRetrieval(self)
+
+    def encode_obs(self, obs, sample_mode="probs"):
+        return self.retrieval.encode_obs(obs, sample_mode=sample_mode)
+
     def summary(self, show_dict=False, show_modules=False):
 
         # Model Name
@@ -342,7 +356,8 @@ class TWISTER(models.Model):
             "optimizer_state_dict": None if not save_optimizer else {key: value.state_dict() for key, value in self.optimizer.items()} if isinstance(self.optimizer, dict) else self.optimizer.state_dict(),
             "model_step": self.model_step,
             "grad_scaler_state_dict": self.grad_scaler.state_dict() if hasattr(self, "grad_scaler") else None,
-            "replay_buffer_state_dict": self.replay_buffer.state_dict()
+            "replay_buffer_state_dict": self.replay_buffer.state_dict(),
+            **({"retrieval_state_dict": self.retrieval.state_dict()} if self.retrieval is not None else {})
         }, path)
         
         # Save Buffer
@@ -401,6 +416,9 @@ class TWISTER(models.Model):
         elif verbose:
             print("load_replay_buffer_state_dict set to False: replay buffer state dict not loaded")
 
+        if self.retrieval is not None:
+            self.retrieval.load_state_dict(checkpoint.get("retrieval_state_dict"))
+
         # Load Grad Scaler
         if "grad_scaler_state_dict" in checkpoint:
             self.grad_scaler_state_dict = checkpoint["grad_scaler_state_dict"]
@@ -413,6 +431,8 @@ class TWISTER(models.Model):
 
         # Replay Buffer
         self.replay_buffer = replay_buffer
+        if self.retrieval is not None:
+            replay_buffer.enable_retrieval(self.config.num_envs)
 
         # Set History
         obs_reset = self.env.reset()
@@ -702,6 +722,12 @@ class TWISTER(models.Model):
         batch_losses = {}
         batch_metrics = {}
 
+        if self.retrieval is not None:
+            if len(inputs) != 7:
+                raise ValueError("Retrieval training requires replay metadata as the seventh input")
+            metadata = inputs[6]
+            inputs = inputs[:6]
+
         # Preprocess state (uint8 to float32)
         inputs = self.preprocess_inputs(inputs, time_stacked=True)
 
@@ -723,6 +749,9 @@ class TWISTER(models.Model):
 
         # Eval Mode: Disable Dropout
         self.rssm.eval()
+
+        if self.retrieval is not None:
+            self.retrieval.prepare(inputs, metadata, precision)
 
         self.set_require_grad(self.policy_network, True)
         self.set_require_grad([self.value_network, self.encoder_network, self.decoder_network, self.rssm, self.reward_network, self.continue_network], False)
@@ -1024,6 +1053,8 @@ class TWISTER(models.Model):
             # Override discount prediction for the first step with the true
             # discount factor from the replay buffer.
             true_first = (1.0 - dones.flatten(start_dim=0, end_dim=1)).unsqueeze(dim=-1).unsqueeze(dim=-1) # 0 or 1
+            if self.retrieval is not None and self.retrieval.initial_dones is not None:
+                true_first = (1.0 - self.retrieval.initial_dones)[:, None, None]
             discounts = torch.cat([true_first, discounts[:, 1:]], dim=1)
 
             ###############################################################################
@@ -1067,7 +1098,7 @@ class TWISTER(models.Model):
             actor_loss *= weights[:, :-1].squeeze(dim=-1)
 
             # Add loss
-            self.add_loss("actor", - actor_loss.mean())  
+            self.add_loss("actor", - (actor_loss.mean() if self.retrieval is None else self.retrieval.loss_mean(actor_loss)))
 
             self.outer.detached_feats = feats.detach()
             self.outer.detached_returns = returns.detach()
@@ -1117,7 +1148,7 @@ class TWISTER(models.Model):
             value_loss *= weights[:, :-1].squeeze(dim=-1)
 
             # Add Loss
-            self.add_loss("value", - value_loss.mean())
+            self.add_loss("value", - (value_loss.mean() if self.retrieval is None else self.retrieval.loss_mean(value_loss)))
 
             return outputs
     
@@ -1274,6 +1305,9 @@ class TWISTER(models.Model):
         return {}, outputs, {}, {}
     
     def log_figure(self, step, inputs, targets, writer, tag, save_image=False): 
+
+        if self.retrieval is not None:
+            inputs = inputs[:6]
 
         # Eval Mode
         mode = self.training

@@ -55,6 +55,20 @@ Overriding model config hyperparameters:
 env_name=atari100k-alien run_name=atari100k override_config='{"num_envs": 4, "epochs": 100, "eval_episode_saving_path": "./videos"}' python3 main.py
 ```
 
+### Optional Retrieval
+
+Retrieval is disabled by default. To add retrieved contexts to actor/critic
+imagination, run from this directory (the shared `../retrieval.py` must exist):
+
+```bash
+python3 -m pip install einops==0.8.1
+env_name=atari100k-seaquest run_name=twister_retrieval override_config='{"retrieval_enabled": true, "retrieval": {"context_length": 8, "warmup_steps": 5000}}' python3 main.py
+```
+
+Set `"retrieval_enabled": false`, or omit the override, for the original training
+path. See [RETRIEVAL.md](RETRIEVAL.md) for timing, weights, configuration, checkpoint
+behavior, and verification details.
+
 ## Evaluation
 
 '--mode evaluation' can be used to evaluate agents. The '--load_last' flag will scan the log directory to load the last checkpoint. '--checkpoint' can also be used to load a specific '.ckpt' checkpoint file.

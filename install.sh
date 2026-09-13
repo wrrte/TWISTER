@@ -25,3 +25,4 @@ pip install tqdm
 pip install wandb
 pip install av
 pip install tensorboard
+pip install einops==0.8.1

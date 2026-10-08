@@ -27,7 +27,7 @@ git clone https://github.com/burchim/TWISTER && cd TWISTER
 
 ### Atari100k Benchmark
 
-The agent can be trained on specific tasks using the 'env_name' variable, which defines the training environment. Training logs, replay buffer and checkpoints will be saved to callbacks/run_name/env_name. 
+The agent can be trained on specific tasks using the 'env_name' variable, which defines the training environment. The editable run defaults in `configs/defaults.json` currently select shared warmup followed by retrieval ON/OFF (`Both`). Logs, replay and checkpoints use `callbacks/<run_name>_warmup/<env_name>`, `callbacks/<run_name>_O/<env_name>`, and `callbacks/<run_name>_X/<env_name>`.
 
 ```
 env_name=atari100k-alien run_name=atari100k python3 main.py
@@ -49,7 +49,30 @@ tensorboard --logdir ./callbacks
 
 ### Override hyperparameters
 
-Overriding model config hyperparameters:
+Edit [configs/defaults.json](configs/defaults.json) to change persistent run defaults.
+It currently contains:
+
+```json
+{
+  "retrieval_enabled": "Both",
+  "num_envs": 4,
+  "retrieval": {
+    "warmup_steps": 50000,
+    "trigger_mode": "z_score",
+    "z_score_threshold": 3.5,
+    "batch_size_reduction": "retrieved"
+  }
+}
+```
+
+Use `override_config` only for settings that differ for one launch. Overrides merge
+recursively, so specifying one `retrieval` option retains the other file settings:
+
+```bash
+env_name=atari100k-seaquest run_name=twister_compare override_config='{"retrieval":{"batch_size_reduction":"anchors"}}' python3 main.py
+```
+
+Other model hyperparameters can also be overridden:
 
 ```
 env_name=atari100k-alien run_name=atari100k override_config='{"num_envs": 4, "epochs": 100, "eval_episode_saving_path": "./videos"}' python3 main.py
@@ -57,25 +80,27 @@ env_name=atari100k-alien run_name=atari100k override_config='{"num_envs": 4, "ep
 
 ### Optional Retrieval
 
-Retrieval is disabled by default. To add retrieved contexts to actor/critic
-imagination, run from this directory (the shared `../retrieval.py` must exist):
+The run defaults currently select `"retrieval_enabled": "Both"`. To run only
+retrieval ON, use a boolean override from this directory (the shared
+`../retrieval.py` must exist):
 
 ```bash
 python3 -m pip install einops==0.8.1
 env_name=atari100k-seaquest run_name=twister_retrieval override_config='{"retrieval_enabled": true, "retrieval": {"context_length": 8, "warmup_steps": 5000}}' python3 main.py
 ```
 
-Set `"retrieval_enabled": false`, or omit the override, for the original training
-path. Set `"retrieval_enabled": "Both"` to share warmup and then run retrieval ON
-and OFF sequentially. Multiple environments finish their current episodes and
+Set `"retrieval_enabled": false` for the original training path. Omit the override
+to use the run defaults from `configs/defaults.json`. `"retrieval_enabled": "Both"`
+shares warmup and then runs retrieval ON and OFF sequentially. Multiple environments finish their current episodes and
 pause individually before the shared checkpoint is saved.
 
 ```bash
-env_name=atari100k-seaquest run_name=twister_compare override_config='{"retrieval_enabled":"Both","retrieval":{"warmup_steps":50000,"batch_size_reduction":"retrieved"}}' python3 main.py
+env_name=atari100k-seaquest run_name=twister_compare python3 main.py
 ```
 
-`retrieval.batch_size_reduction` accepts `none` (default: keep every original
-imagination start), `retrieved`, `anchors`, or `half`. See [RETRIEVAL.md](RETRIEVAL.md)
+`retrieval.batch_size_reduction` accepts `none` (keep every original imagination
+start), `retrieved`, `anchors`, or `half`. The run file currently selects `retrieved`;
+the model fallback is `none`. See [RETRIEVAL.md](RETRIEVAL.md)
 for the count formulas, ON/OFF output paths, resume commands, and verification.
 
 ## Evaluation
@@ -83,7 +108,7 @@ for the count formulas, ON/OFF output paths, resume commands, and verification.
 '--mode evaluation' can be used to evaluate agents. The '--load_last' flag will scan the log directory to load the last checkpoint. '--checkpoint' can also be used to load a specific '.ckpt' checkpoint file.
 
 ```
-env_name=atari100k-alien run_name=atari100k python3 main.py --load_last --mode evaluation
+env_name=atari100k-alien run_name=atari100k_O override_config='{"retrieval_enabled":true}' python3 main.py --load_last --mode evaluation
 ```
 
 ## Script options

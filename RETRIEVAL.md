@@ -2,7 +2,11 @@
 
 ## Scope and Baseline Equivalence
 
-`retrieval_enabled` defaults to the JSON boolean `false`. When disabled, no
+The model fallback for `retrieval_enabled` is the JSON boolean `false`. The
+standard entry point reads `configs/defaults.json`, which currently selects
+`"Both"`, 4 environments, z-score triggering with threshold 3.5, warmup of 50000
+decisions, and `batch_size_reduction="retrieved"`. Override `retrieval_enabled`
+with `false` to run the baseline. When disabled, no
 retrieval controller, manager, projection, replay index, metadata collation,
 extra encoder/value forward, or weighted reduction runs. Network initialization,
 replay sampling calls, world-model losses, imagination starts, actor/critic
@@ -52,7 +56,7 @@ and shifted to TWISTER's `[-0.5, 0.5]` range.
 
 ## Imagination and Weights
 
-By default, all `N = batch_size * L` original imagination starts remain present. Each
+With `batch_size_reduction="none"`, all `N = batch_size * L` original imagination starts remain present. Each
 retrieved context contributes exactly one additional start, its final posterior.
 The encoder and TSSM warm up that context in evaluation mode under `no_grad`.
 The final stochastic/deterministic state, each layer's K/V cache, the current
@@ -81,7 +85,7 @@ as the number of matches increases, so that proposal is not used.
 
 | Mode | Original starts retained |
 | --- | --- |
-| `none` (default) | `N` |
+| `none` (model fallback) | `N` |
 | `retrieved` | `max(0, N - R)` |
 | `anchors` | `max(0, N - A)` |
 | `half` | `max(0, N - floor((R + A) / 2))` |
@@ -94,7 +98,7 @@ original starts. If `R > N`, the original count is zero and all `R` retrieved
 contexts remain. This matches STORM/Drama's count formulas at TWISTER's
 imagination-start level, rather than reducing the world-model replay batch.
 
-The default remains additive. With default `N=1024` and at most 10 groups,
+The `none` mode remains additive. With default `N=1024` and at most 10 groups,
 retrieval has at most `10/1034`, approximately 0.97%, of the nominal sample mass.
 Changing `max_contexts` only caps the number of sequences; it does not increase
 the total mass of a fixed number of groups. Discount weights can further reduce
@@ -105,13 +109,33 @@ return population, as in its original algorithm; only loss reduction is weighted
 
 ## Configuration
 
-Pass settings through `override_config` in `configs/twister.py`:
+Store persistent run settings in **`configs/defaults.json`**. Both the entry point's
+branch selection and `configs/twister.py` use the same resolved settings. The
+priority is model fallbacks, then this JSON file, then `override_config` from the
+launch environment. Nested objects merge recursively; overriding one retrieval
+setting preserves all the other file settings.
+
+The current file selects `Both`, `num_envs=4`, `warmup_steps=50000`,
+`trigger_mode="z_score"`, `z_score_threshold=3.5`, and
+`batch_size_reduction="retrieved"`. Run with these defaults:
+
+```bash
+env_name=atari100k-seaquest run_name=twister_compare python3 main.py
+```
+
+Override only a specific option for one run:
+
+```bash
+env_name=atari100k-seaquest run_name=twister_compare override_config='{"retrieval":{"batch_size_reduction":"anchors"}}' python3 main.py
+```
+
+For a single ON/OFF run, override `retrieval_enabled` with `true` / `false`. For example:
 
 ```bash
 env_name=atari100k-seaquest run_name=twister_retrieval override_config='{"retrieval_enabled": true, "retrieval": {"context_length": 8, "warmup_steps": 5000, "trigger_mode": "z_score"}}' python3 main.py
 ```
 
-| Setting in `retrieval` | Default | Meaning |
+| Setting in `retrieval` | Model fallback | Meaning |
 | --- | --- | --- |
 | `context_length` | 8 | Retrieved history length, 1 through `L-2` |
 | `batch_size_reduction` | `none` | `none`, `retrieved`, `anchors`, or `half`; counts imagination starts |
@@ -148,7 +172,7 @@ chunked, without retaining the full replay's latent matrix on the GPU.
 From this directory, in a Python environment with TWISTER dependencies and ROMs:
 
 ```bash
-env_name=atari100k-seaquest run_name=twister_compare override_config='{"retrieval_enabled":"Both","num_envs":4,"retrieval":{"warmup_steps":50000,"trigger_mode":"z_score","z_score_threshold":3.5,"batch_size_reduction":"retrieved"}}' python main.py
+env_name=atari100k-seaquest run_name=twister_compare python main.py
 ```
 
 The warmup target counts actual environment decisions summed across environments.
@@ -193,13 +217,18 @@ python main.py --shared_warmup callbacks/twister_compare_warmup/atari100k-seaque
 ```
 
 This restores the saved environment name, model overrides, and original run name,
-and writes to the corresponding `_O` or `_X` directory. To continue an interrupted
+and writes to the corresponding `_O` or `_X` directory. Shared-warmup snapshots
+save the resolved settings; subsequent edits to `defaults.json` do not change
+either child or a branch restarted through `--shared_warmup`. To continue an interrupted
 child instead, use its boolean `retrieval_enabled` setting, its suffixed run name,
 the same model settings, and `--load_last` as in ordinary TWISTER training.
 
 TensorBoard metrics under `Training-step/` include `retrieval_original_starts`
 and `retrieval_imagination_starts`, in addition to contexts, anchors, hit rate,
 warmup status, and weight sum.
+
+The configured default `Both` is a training mode. For evaluation, select a child's
+run name and explicitly set `retrieval_enabled` to its boolean ON/OFF value.
 
 ## Checkpoints
 

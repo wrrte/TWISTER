@@ -1,0 +1,10 @@
+{
+  "retrieval_enabled": "Both",
+  "num_envs": 4,
+  "retrieval": {
+    "warmup_steps": 50000,
+    "trigger_mode": "z_score",
+    "z_score_threshold": 3.5,
+    "batch_size_reduction": "retrieved"
+  }
+}

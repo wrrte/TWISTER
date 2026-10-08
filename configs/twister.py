@@ -1,16 +1,14 @@
 import nnet
 import os
-import json
+from configuration import get_run_config
 
 # Extract params from filename
 env_name = os.environ["env_name"]
 print("TWISTER selected env_name: {}".format(env_name))
 
 # Override Config
-override_config = os.environ.get("override_config", {})
-if isinstance(override_config, str):
-    override_config = json.loads(override_config)
-print("override_config:", override_config)
+override_config = get_run_config()
+print("effective config:", override_config)
 
 # Model
 model = nnet.models.TWISTER(env_name=env_name, override_config=override_config)

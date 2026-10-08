@@ -23,6 +23,7 @@ from nnet import optimizers
 from nnet import envs
 from nnet.modules import twister as twister_networks
 from nnet.structs import AttrDict
+from nnet.utils import grouped_random_resized_crop
 
 # Other
 import copy
@@ -105,6 +106,7 @@ class TWISTER(models.Model):
         self.config.actor_grad_max_norm = 100
         self.config.grad_init_scale = 32.0
         self.config.precision = {"dmc": torch.float16, "atari100k": torch.float32}[self.env_type]
+        self.config.distribution_validate_args = False
 
         # Replay Buffer
         self.config.buffer_capacity = int(1e6)
@@ -175,6 +177,7 @@ class TWISTER(models.Model):
 
         # Contrastive
         self.config.contrastive_augments = torchvision.transforms.RandomResizedCrop(size=(64, 64), antialias=True, scale=(0.25, 1))
+        self.config.group_contrastive_augments = True
         self.config.contrastive_hidden_size = self.config.model_hidden_size
         self.config.contrastive_out_size = self.config.contrastive_hidden_size
         self.config.contrastive_steps = 10
@@ -199,6 +202,10 @@ class TWISTER(models.Model):
 
         # Config asserts
         assert self.config.att_context_left <= self.config.L
+        if type(self.config.group_contrastive_augments) is not bool:
+            raise ValueError('group_contrastive_augments must be a JSON boolean')
+        if type(self.config.distribution_validate_args) is not bool:
+            raise ValueError('distribution_validate_args must be a JSON boolean')
         if type(self.config.retrieval_enabled) is not bool and self.config.retrieval_enabled != "Both":
             raise ValueError('retrieval_enabled must be a JSON boolean or "Both"')
         if self.config.retrieval_enabled == "Both" and not self.config.load_replay_buffer_state_dict:
@@ -240,6 +247,7 @@ class TWISTER(models.Model):
             cnn_norm=self.config.encoder_cnn_norm,
             stoch_size=self.config.model_stoch_size,
             discrete=self.config.model_discrete,
+            validate_args=self.config.distribution_validate_args,
         )
         self.decoder_network = twister_networks.DecoderNetwork(
             dim_output_cnn=self.config.image_channels, 
@@ -259,7 +267,8 @@ class TWISTER(models.Model):
             num_heads=self.config.num_heads_trans,
             drop_rate=self.config.drop_rate_trans,
             att_context_left=self.config.att_context_left,
-            module_pre_norm=self.config.module_pre_norm
+            module_pre_norm=self.config.module_pre_norm,
+            validate_args=self.config.distribution_validate_args,
         )
         self.policy_network = twister_networks.PolicyNetwork(
             num_actions=self.env.num_actions, 
@@ -268,7 +277,8 @@ class TWISTER(models.Model):
             num_mlp_layers=self.config.action_layers, 
             discrete=self.config.policy_discrete,
             norm=self.config.norm,
-            sampling_tmp=self.config.sampling_tmp
+            sampling_tmp=self.config.sampling_tmp,
+            validate_args=self.config.distribution_validate_args,
         )
         self.value_network = twister_networks.ValueNetwork(
             hidden_size=self.config.value_hidden_size, 
@@ -286,7 +296,8 @@ class TWISTER(models.Model):
             hidden_size=self.config.discount_hidden_size, 
             feat_size=feat_size, 
             num_mlp_layers=self.config.discount_layers,
-            norm=self.config.norm
+            norm=self.config.norm,
+            validate_args=self.config.distribution_validate_args,
         )
         self.contrastive_network = nn.ModuleList([twister_networks.ContrastiveNetwork(
             feat_size=feat_size + t * self.env.num_actions,
@@ -858,11 +869,11 @@ class TWISTER(models.Model):
                     self.env_step()
 
         # Update Infos
-        self.infos["episodes"] = self.episodes.item()
+        self.add_info("episodes", self.episodes)
         for env_i in range(self.config.num_envs):
-            self.infos["ep_rewards_{}".format(env_i)] = round(self.ep_rewards[env_i].item(), 2)
+            self.add_info("ep_rewards_{}".format(env_i), self.ep_rewards[env_i], digits=2)
         self.infos["step"] = self.model_step
-        self.infos["action_step"] = self.action_step.item()
+        self.add_info("action_step", self.action_step)
 
         # Built
         if not self.built:
@@ -934,7 +945,7 @@ class TWISTER(models.Model):
             states_flatten = states.flatten(0, 1)
 
             # Augment
-            states_aug = torch.stack([self.config.contrastive_augments(states_flatten[b]) for b in range(states_flatten.shape[0])], dim=0).reshape(states.shape)
+            states_aug = self.augment_contrastive_images(states_flatten).reshape(states.shape)
 
             # Forward
             posts_con = self.encoder_network(states_aug)
@@ -1122,7 +1133,7 @@ class TWISTER(models.Model):
 
             # Compute lambda returns (B', H, 1), one action grad lost because of next value
             returns = self.compute_td_lambda(rewards=model_rewards.mode()[:, 1:], values=values.mode()[:, 1:], discounts=self.config.gamma * discounts[:, 1:])
-            self.add_info("returns_mean", returns.mean().item())
+            self.add_info("returns_mean", returns.mean())
 
             # Update Perc
             offset, invscale = self.update_perc(returns)
@@ -1147,7 +1158,7 @@ class TWISTER(models.Model):
             
             # Add Negative Entropy loss
             policy_ent = policy_dist.entropy()[:, :-1]
-            self.add_info("policy_ent", policy_ent.mean().item())
+            self.add_info("policy_ent", policy_ent.mean())
             actor_loss += self.config.eta_entropy * policy_ent
 
             # Apply weights
@@ -1217,8 +1228,8 @@ class TWISTER(models.Model):
         # Update percentiles ema
         self.perc_low = self.config.return_norm_decay * self.perc_low + (1 - self.config.return_norm_decay) * low
         self.perc_high = self.config.return_norm_decay * self.perc_high + (1 - self.config.return_norm_decay) * high
-        self.add_info("perc_low", self.perc_low.item())
-        self.add_info("perc_high", self.perc_high.item())
+        self.add_info("perc_low", self.perc_low)
+        self.add_info("perc_high", self.perc_high)
 
         # Compute offset, invscale
         offset = self.perc_low
@@ -1268,9 +1279,16 @@ class TWISTER(models.Model):
         info_nce_loss = features_pos - features_all
 
         # Accuracy Contrastive
-        acc_con = torch.mean(torch.where(features.argmax(dim=-1).cpu() == torch.arange(0, features.shape[0]), 1.0, 0.0))
+        acc_con = torch.mean(torch.where(
+            features.argmax(dim=-1) == torch.arange(0, features.shape[0], device=features.device),
+            1.0, 0.0))
 
         return info_nce_loss, acc_con
+
+    def augment_contrastive_images(self, images):
+        if self.config.group_contrastive_augments:
+            return grouped_random_resized_crop(images, self.config.contrastive_augments)
+        return torch.stack([self.config.contrastive_augments(image) for image in images], dim=0)
 
     def play(self, verbose=False, return_att_w=False):
 
@@ -1412,7 +1430,7 @@ class TWISTER(models.Model):
             states_flatten = states.flatten(0, 1)
 
             # Augment
-            states_aug_con = torch.stack([self.config.contrastive_augments(states_flatten[b]) for b in range(states_flatten.shape[0])], dim=0).reshape(states.shape)
+            states_aug_con = self.augment_contrastive_images(states_flatten).reshape(states.shape)
 
             # Forward
             posts_con = self.encoder_network(states_aug_con)

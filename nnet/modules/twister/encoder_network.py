@@ -36,6 +36,7 @@ class EncoderNetwork(nn.Module):
         dist_weight_init="xavier_uniform", 
         dist_bias_init="zeros",
         uniform_mix=0.01,
+        validate_args=None,
     ):
         super(EncoderNetwork, self).__init__()
 
@@ -47,6 +48,7 @@ class EncoderNetwork(nn.Module):
         self.stoch_size = stoch_size
         self.discrete = discrete
         self.uniform_mix = uniform_mix
+        self.validate_args = validate_args
 
         # 64 -> 32 -> 16 -> 8 -> 4
         self.cnn = modules.ConvNeuralNetwork(  
@@ -73,7 +75,10 @@ class EncoderNetwork(nn.Module):
 
     def get_dist(self, state):
 
-        return torch.distributions.Independent(distributions.OneHotDist(logits=state['logits'], uniform_mix=self.uniform_mix), 1)
+        return torch.distributions.Independent(
+            distributions.OneHotDist(logits=state['logits'], uniform_mix=self.uniform_mix,
+                                     validate_args=self.validate_args),
+            1, validate_args=self.validate_args)
 
     def forward_cnn(self, x):
 

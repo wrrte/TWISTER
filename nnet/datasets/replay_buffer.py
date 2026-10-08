@@ -47,6 +47,7 @@ class ReplayBuffer(datasets.Dataset):
         self.epoch_length = epoch_length
         self.sample_length = sample_length
         self.ram_buffer = collections.OrderedDict()
+        self._sample_keys = None
         self.streams = collections.OrderedDict()
         self.traj_index = torch.tensor(0)
         self.num_steps = torch.tensor(0)
@@ -125,6 +126,7 @@ class ReplayBuffer(datasets.Dataset):
             self.last_save_traj_index = self.traj_index.item()
 
     def load(self, buffer_keys):
+        self._sample_keys = None
         
         # All Saves
         # A shared checkpoint names its exact sources. Existing files in a new
@@ -158,6 +160,7 @@ class ReplayBuffer(datasets.Dataset):
             # Pop oldest Episode
             oldest_episode_id = (self.traj_index - self.num_steps).item()
             self.ram_buffer.pop(oldest_episode_id)
+            self._sample_keys = None
             if self.retrieval is not None:
                 self.retrieval.remove_window(oldest_episode_id)
 
@@ -193,6 +196,7 @@ class ReplayBuffer(datasets.Dataset):
 
         # Add to ram buffer (using tensor instead of int as key will replace instead of adding)
         self.ram_buffer[self.traj_index.item()] = traj
+        self._sample_keys = None
         if self.retrieval is not None:
             self.retrieval.add_window(self.traj_index.item(), sample_id, traj)
 
@@ -220,7 +224,11 @@ class ReplayBuffer(datasets.Dataset):
 
         
         # Select Episode from ram
-        traj_id = random.choice(list(self.ram_buffer.keys()))
+        # Keep the same insertion order and random.choice call. Rebuild only
+        # after append, eviction or load changes the eligible trajectories.
+        if self._sample_keys is None:
+            self._sample_keys = list(self.ram_buffer.keys())
+        traj_id = random.choice(self._sample_keys)
         traj = self.ram_buffer[traj_id]
 
         # Stack elts

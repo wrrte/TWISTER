@@ -39,7 +39,8 @@ class PolicyNetwork(nn.Module):
             norm={"class": "LayerNorm", "params": {"eps": 1e-3}}, 
             dist_weight_init="xavier_uniform", 
             dist_bias_init="zeros",
-            sampling_tmp=1.0
+            sampling_tmp=1.0,
+            validate_args=None,
         ):
         super(PolicyNetwork, self).__init__()
 
@@ -50,6 +51,7 @@ class PolicyNetwork(nn.Module):
         self.discrete = discrete
         self.uniform_mix = uniform_mix
         self.sampling_tmp = sampling_tmp
+        self.validate_args = validate_args
 
     def forward(self, x):
 
@@ -62,7 +64,9 @@ class PolicyNetwork(nn.Module):
             logits = self.linear_proj(x)
 
             # One Hot Distribution
-            action_dist = distributions.OneHotDist(logits=logits, uniform_mix=self.uniform_mix, sampling_tmp=self.sampling_tmp)
+            action_dist = distributions.OneHotDist(
+                logits=logits, uniform_mix=self.uniform_mix, sampling_tmp=self.sampling_tmp,
+                validate_args=self.validate_args)
 
             return action_dist
 
@@ -78,8 +82,9 @@ class PolicyNetwork(nn.Module):
             std = (self.max_std - self.min_std) * F.sigmoid(std + 2.0) + self.min_std
 
             # Normal Distribution
-            action_dist = torch.distributions.Independent(distributions.Normal(mean, std), 1)
+            action_dist = torch.distributions.Independent(
+                distributions.Normal(mean, std, validate_args=self.validate_args),
+                1, validate_args=self.validate_args)
 
             return action_dist
     
-

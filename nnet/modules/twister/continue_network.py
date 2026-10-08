@@ -32,9 +32,11 @@ class ContinueNetwork(nn.Module):
         bias_init="zeros", 
         norm={"class": "LayerNorm", "params": {"eps": 1e-3}}, 
         dist_weight_init="xavier_uniform", 
-        dist_bias_init="zeros"
+        dist_bias_init="zeros",
+        validate_args=None,
     ):
         super(ContinueNetwork, self).__init__()
+        self.validate_args = validate_args
 
         self.mlp = modules.MultiLayerPerceptron(dim_input=feat_size, dim_layers=[hidden_size for _ in range(num_mlp_layers)], act_fun=act_fun, weight_init=weight_init, bias_init=bias_init, norm=norm, bias=norm is None)
         self.linear_proj = modules.Linear(hidden_size, 1, weight_init=dist_weight_init, bias_init=dist_bias_init)
@@ -48,7 +50,8 @@ class ContinueNetwork(nn.Module):
         x = self.linear_proj(x)
 
         # Normal Distribution
-        value_dist = torch.distributions.Independent(distributions.Bernoulli(logits=x), 1)
+        value_dist = torch.distributions.Independent(
+            distributions.Bernoulli(logits=x, validate_args=self.validate_args),
+            1, validate_args=self.validate_args)
 
         return value_dist
-    

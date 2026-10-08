@@ -46,6 +46,7 @@ class TSSM(nn.Module):
             drop_rate=0.1,
             att_context_left=64,
             module_pre_norm=False,
+            validate_args=None,
         ):
         super(TSSM, self).__init__()
 
@@ -59,6 +60,7 @@ class TSSM(nn.Module):
         self.bias_init = bias_init
         self.norm = norm
         self.uniform_mix = uniform_mix
+        self.validate_args = validate_args
         self.action_clip = action_clip
         self.dist_weight_init = dist_weight_init
         self.dist_bias_init = dist_bias_init
@@ -245,7 +247,10 @@ class TSSM(nn.Module):
     
     def get_dist(self, state):
 
-        return torch.distributions.Independent(distributions.OneHotDist(logits=state['logits'], uniform_mix=self.uniform_mix), 1)
+        return torch.distributions.Independent(
+            distributions.OneHotDist(logits=state['logits'], uniform_mix=self.uniform_mix,
+                                     validate_args=self.validate_args),
+            1, validate_args=self.validate_args)
 
     def slice_hidden(self, hidden):
 

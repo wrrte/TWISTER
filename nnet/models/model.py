@@ -28,6 +28,7 @@ import wandb
 from nnet import modules
 from nnet import schedulers
 from nnet.optimizers import optim_dict
+from nnet.structs import ScalarInfo
 
 class Model(modules.Module):
 
@@ -346,7 +347,7 @@ class Model(modules.Module):
 
                 # grad norm
                 if "grad_norm" in param_group:
-                    self.add_info("grad_norm_{}".format(i), round(float(param_group['grad_norm']), 4))
+                    self.add_info("grad_norm_{}".format(i), param_group['grad_norm'], digits=4)
 
                 # grad infos
                 if "grad_min" in param_group:
@@ -364,7 +365,7 @@ class Model(modules.Module):
 
             # grad norm
             if "grad_norm" in self.optimizer.param_groups[0]:
-                self.add_info("grad_norm", round(float(self.optimizer.param_groups[0]['grad_norm']), 4))
+                self.add_info("grad_norm", self.optimizer.param_groups[0]['grad_norm'], digits=4)
 
             # grad infos
             if "grad_min" in self.optimizer.param_groups[0]:
@@ -572,6 +573,11 @@ class Model(modules.Module):
         # Infos
         for key, value in infos.items():
 
+            if isinstance(value, ScalarInfo):
+                value = value.get_value()
+            elif isinstance(value, torch.Tensor) and value.numel() == 1:
+                value = value.item()
+
             # Display format
             if key.startswith("lr"):
                 description += "{}: {:.2e} - ".format(key, value)
@@ -595,6 +601,8 @@ class Model(modules.Module):
 
         # Infos
         for key, value in infos.items():
+            if isinstance(value, ScalarInfo):
+                value = value.get_value()
             if isinstance(value, float) or isinstance(value, int):
                 writer.add_scalar(os.path.join(tag, key), float(value), step)
             elif isinstance(value, torch.Tensor):

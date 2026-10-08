@@ -153,6 +153,32 @@ Other model hyperparameters can also be overridden:
 env_name=atari100k-alien run_name=atari100k override_config='{"num_envs": 4, "epochs": 100, "eval_episode_saving_path": "./videos"}' python3 main.py
 ```
 
+### Training performance
+
+Training groups equal-size image crops for resizing by default. Each image still
+samples its own crop with the original `RandomResizedCrop` parameters, rejection
+sampling and fallback; positions are not shared between images. Interpolation,
+antialiasing, image order and tensor precision are retained.
+
+Replay sampling caches its ordered list of eligible trajectories until an append,
+eviction or load changes it. Logging scalars stay on the GPU until a display or
+log is due, and contrastive accuracy is computed on the GPU. Distribution argument
+checks are disabled locally in TWISTER to avoid synchronizing every distribution;
+set `distribution_validate_args` to `true` when debugging invalid inputs.
+
+These changes leave batch sizes, imagination horizon, environment interaction
+schedule, optimizer, sampling distributions, AMP/TF32 settings and FP64 epoch
+statistics unchanged. Running processes use their already imported code; the next
+launch of `./7_run_twister_queue.sh` uses the changes without additional options.
+
+To use the original per-image crop/resize path and enable distribution checks:
+
+```bash
+env_name=atari100k-gopher override_config='{"group_contrastive_augments": false, "distribution_validate_args": true}' python3 main.py
+```
+
+The replay cache and deferred logging remain active with these overrides.
+
 ### Optional Retrieval
 
 The run defaults currently select `"retrieval_enabled": "Both"`. To run only

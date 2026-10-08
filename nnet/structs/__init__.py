@@ -14,3 +14,4 @@
 
 # Structs
 from .attr_dict import AttrDict
+from .scalar_info import ScalarInfo

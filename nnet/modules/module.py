@@ -18,6 +18,7 @@ import torch.nn as nn
 
 # Other
 from collections import OrderedDict
+from nnet.structs import ScalarInfo
 
 class Module(nn.Module):
 
@@ -35,10 +36,18 @@ class Module(nn.Module):
 
         self.added_losses[name] = {"loss": loss, "weight": weight}
 
-    def add_info(self, name, info):
+    def add_info(self, name, info, digits=None):
 
         """ Add module info to model infos during forward_model """
 
+        # Scalars may be CUDA tensors. Snapshot them without synchronizing;
+        # mutable counters must retain their value at this point in the step.
+        if isinstance(info, torch.Tensor) and info.numel() == 1:
+            info = info.detach().clone()
+            if digits is not None:
+                info = ScalarInfo(info, digits)
+        elif digits is not None:
+            info = round(info, digits)
         self.infos[name] = info
 
     def add_metric(self, name, metric):
@@ -125,5 +134,4 @@ class Module(nn.Module):
         else:
             self.modules_buffer[name] = module
             object.__setattr__(self, name, module)
-
 

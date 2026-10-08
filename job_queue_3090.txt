@@ -1,3 +1,1 @@
-# One command per line. Workers on RTX 3090 GPUs share this queue.
-env_name=atari100k-gopher run_name=atari100k_seed3090 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3090
 env_name=atari100k-gopher run_name=atari100k_seed3100 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3100

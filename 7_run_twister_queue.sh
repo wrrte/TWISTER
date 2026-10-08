@@ -1,13 +1,13 @@
 #!/bin/bash
-export CUDA_VISIBLE_DEVICES=7
 set -euo pipefail
 
-if (( $# < 1 || $# > 2 )); then
-    echo "Usage: $0 GPU_ID [QUEUE_FILE]" >&2
+if (( $# > 2 )); then
+    echo "Usage: $0 [GPU_ID [QUEUE_FILE]] (default GPU_ID: 7)" >&2
     exit 2
 fi
 
-GPU_ID="$1"
+# Match STORM-1/7_train.sh when launched without arguments.
+GPU_ID="${1:-7}"
 if [[ ! "$GPU_ID" =~ ^[0-9]+$ ]]; then
     echo "GPU_ID must be a non-negative NVIDIA GPU index." >&2
     exit 2

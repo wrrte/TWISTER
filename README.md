@@ -65,12 +65,14 @@ The seed controls randomness; CUDA operations can still be nondeterministic.
 
 ### GPU job queues
 
-`6_run_twister_train.sh` and `7_run_twister_train.sh` now run persistent queue
-workers. Start each in a separate terminal using your TWISTER Python environment:
+`7_run_twister_queue.sh` runs a persistent queue worker. With no arguments, it
+uses GPU 7 and automatically selects a queue based on that GPU's model, matching
+`STORM-1/7_train.sh`. Start it using your TWISTER Python environment:
 
 ```bash
-bash 6_run_twister_train.sh
-bash 7_run_twister_train.sh
+./7_run_twister_queue.sh
+# To run another worker on GPU 6, use a separate terminal:
+./7_run_twister_queue.sh 6
 ```
 
 Each worker sets `CUDA_VISIBLE_DEVICES` and queries that same NVIDIA GPU index
@@ -106,13 +108,11 @@ env_name=atari100k-alien run_name=atari100k_seed42 python3 -u main.py --seed 42
 JOBS
 ```
 
-Use the common worker for any other GPU, or pass an explicit queue file:
+Pass a GPU index to override GPU 7, or specify both a GPU and a queue file:
 
 ```bash
-bash run_twister_queue.sh 0
-bash run_twister_queue.sh 7 job_queue_custom.txt
-# The GPU-specific wrappers also accept an explicit queue file:
-bash 7_run_twister_train.sh job_queue_custom.txt
+./7_run_twister_queue.sh 0
+./7_run_twister_queue.sh 7 job_queue_custom.txt
 ```
 
 ### Visualize experiments

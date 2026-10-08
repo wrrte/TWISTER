@@ -18,7 +18,7 @@ class TWISTERRetrieval:
         hash_bits=12, hash_sample_mode="probs", max_bucket_size=512,
         use_pca=True, max_pca_samples=10000, chunk_size=256,
         global_rebuild_enable=True, global_rebuild_threshold=0.2,
-        global_rebuild_cooldown=2000,
+        global_rebuild_cooldown=2000, batch_size_reduction="none",
     )
 
     def __init__(self, model):
@@ -53,6 +53,8 @@ class TWISTERRetrieval:
             raise ValueError("retrieval.trigger_mode must be absolute or z_score")
         if cfg["hash_sample_mode"] not in ("probs", "mode", "sample"):
             raise ValueError("retrieval.hash_sample_mode must be probs, mode, or sample")
+        if cfg["batch_size_reduction"] not in ("none", "retrieved", "anchors", "half"):
+            raise ValueError("retrieval.batch_size_reduction must be none, retrieved, anchors, or half")
         self.manager = None
         self.hash_built = False
         self.last_rebuild_step = -cfg["global_rebuild_cooldown"]
@@ -132,7 +134,7 @@ class TWISTERRetrieval:
         segments = firsts_cpu.cumsum(1)
         for b in range(batch):
             for t in range(length - 1):
-                anchor_t = t + 1 + manager.anchor_offset
+                anchor_t = t + manager.anchor_offset
                 same_episode = (0 <= anchor_t < length
                                 and segments[b, anchor_t] == segments[b, t])
                 if not same_episode or not replay.is_valid_context(
@@ -147,7 +149,28 @@ class TWISTERRetrieval:
             bases, envs, replay.pointer_limit, skip_len=manager.context_length,
             is_warmup=is_warmup, transition_mask=valid)
 
-    def _append_contexts(self, obs, actions, indices, weights, dones):
+    def _select_original_starts(self, dones, retrieved_count, anchors):
+        """Subsample complete imagination states, including their cache and masks."""
+        mode = self.config["batch_size_reduction"]
+        reduction = {"none": 0, "retrieved": retrieved_count, "anchors": anchors,
+                     "half": (retrieved_count + anchors) // 2}[mode]
+        flat_dones = dones.flatten()
+        count = flat_dones.numel()
+        keep = max(0, count - reduction)
+        if keep == count:
+            return flat_dones
+        model = self.model
+        selected = (torch.randperm(count, device=model.device)[:keep].sort().values
+                    if keep else torch.empty(0, dtype=torch.long, device=model.device))
+        for key, value in model.detached_posts.items():
+            model.detached_posts[key] = (
+                [tuple(tensor.index_select(0, selected) for tensor in block) for block in value]
+                if key == "hidden" else value.index_select(0, selected))
+        model.detached_is_firsts = model.detached_is_firsts.index_select(0, selected)
+        model.detached_is_firsts_hidden = model.detached_is_firsts_hidden.index_select(0, selected)
+        return flat_dones.index_select(0, selected)
+
+    def _append_contexts(self, obs, actions, indices, weights, dones, anchors=0):
         model = self.model
         replay = model.replay_buffer.retrieval_view()
         length, context = self.config["context_length"], model.config.att_context_left
@@ -155,6 +178,7 @@ class TWISTERRetrieval:
         ret_dones = replay.context_field(indices, 1, 3, model.device).flatten()
         latent = model.encoder_network(obs.to(model.device) - 0.5)
         posts, _ = model.rssm.observe(latent, actions.to(model.device).clone(), firsts)
+        original_dones = self._select_original_starts(dones, len(indices), anchors)
         # Match the final time slice of WorldModel.forward's cache/mask flattening.
         for key, value in model.detached_posts.items():
             if key == "hidden":
@@ -175,10 +199,12 @@ class TWISTERRetrieval:
             firsts[:, max(0, length - context):length - 1]), 1)
         model.detached_is_firsts = torch.cat((model.detached_is_firsts, firsts[:, -1:]), 0)
         model.detached_is_firsts_hidden = torch.cat((model.detached_is_firsts_hidden, hidden_firsts), 0)
-        self.initial_dones = torch.cat((dones.flatten(), ret_dones), 0).detach()
+        self.initial_dones = torch.cat((original_dones, ret_dones), 0).detach()
         self.sample_weights = torch.cat((
-            torch.ones(dones.numel(), device=model.device),
+            torch.ones(original_dones.numel(), device=model.device),
             torch.tensor(weights, dtype=torch.float32, device=model.device)), 0)
+        model.add_info("retrieval_original_starts", original_dones.numel())
+        model.add_info("retrieval_imagination_starts", self.initial_dones.numel())
 
     def prepare(self, inputs, metadata, precision):
         self.sample_weights = None
@@ -189,7 +215,7 @@ class TWISTERRetrieval:
         # action_step counts emulator frames; warmup/cooldown count decisions
         # summed over environments, matching STORM/Drama's sample-step units.
         step = int(model.action_step.item()) // model.env.action_repeat
-        warmup = step < cfg["warmup_steps"]
+        warmup = model.config.retrieval_enabled == "Both" or step < cfg["warmup_steps"]
         autocast = (torch.autocast(device_type="cuda", dtype=precision)
                     if torch.device(model.device).type == "cuda" and precision != torch.float32
                     else nullcontext())
@@ -204,6 +230,8 @@ class TWISTERRetrieval:
             model.add_info("retrieval_triggers", triggers)
             model.add_info("retrieval_warmup", int(warmup))
             model.add_info("retrieval_contexts", 0)
+            model.add_info("retrieval_original_starts", inputs[3].numel())
+            model.add_info("retrieval_imagination_starts", inputs[3].numel())
             if warmup:
                 return
             if cfg["max_contexts"] == 0:
@@ -215,7 +243,7 @@ class TWISTERRetrieval:
                 multiplier=cfg["multiplier"], target=cfg["target"],
                 max_contexts=cfg["max_contexts"], return_indices=True)
             if obs is not None:
-                self._append_contexts(obs, actions, indices, weights, inputs[3])
+                self._append_contexts(obs, actions, indices, weights, inputs[3], anchors=anchors)
             model.add_info("retrieval_contexts", len(indices))
             model.add_info("retrieval_anchors", anchors)
             model.add_info("retrieval_candidates", candidates)

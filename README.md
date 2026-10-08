@@ -66,8 +66,17 @@ env_name=atari100k-seaquest run_name=twister_retrieval override_config='{"retrie
 ```
 
 Set `"retrieval_enabled": false`, or omit the override, for the original training
-path. See [RETRIEVAL.md](RETRIEVAL.md) for timing, weights, configuration, checkpoint
-behavior, and verification details.
+path. Set `"retrieval_enabled": "Both"` to share warmup and then run retrieval ON
+and OFF sequentially. Multiple environments finish their current episodes and
+pause individually before the shared checkpoint is saved.
+
+```bash
+env_name=atari100k-seaquest run_name=twister_compare override_config='{"retrieval_enabled":"Both","retrieval":{"warmup_steps":50000,"batch_size_reduction":"retrieved"}}' python3 main.py
+```
+
+`retrieval.batch_size_reduction` accepts `none` (default: keep every original
+imagination start), `retrieved`, `anchors`, or `half`. See [RETRIEVAL.md](RETRIEVAL.md)
+for the count formulas, ON/OFF output paths, resume commands, and verification.
 
 ## Evaluation
 

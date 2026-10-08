@@ -54,6 +54,8 @@ class ReplayBuffer(datasets.Dataset):
         self.buffer_dir = os.path.join(root, self.buffer_name)
         self.save_trajectories = save_trajectories
         self.retrieval = None
+        self.source_dirs = None
+        self.source_files = []
 
         # Create Buffer Dir
         if self.save_trajectories and not os.path.isdir(self.buffer_dir):
@@ -70,13 +72,22 @@ class ReplayBuffer(datasets.Dataset):
             "traj_index": self.traj_index,
             "num_steps": self.num_steps,
             "buffer_keys": list(self.ram_buffer.keys()),
+            **({"source_dirs": list(dict.fromkeys(self.source_dirs + [os.path.abspath(self.buffer_dir)]))}
+               if self.source_dirs is not None else {}),
+            **({"source_files": list(dict.fromkeys(self.source_files + [os.path.abspath(
+                os.path.join(self.buffer_dir, "{}.torch".format(self.traj_index)))]))}
+               if self.source_dirs is not None else {}),
             **({"retrieval": self.retrieval.state_dict()} if self.retrieval is not None else {})
         }
     
     def load_state_dict(self, state_dict):
+        self.source_dirs = state_dict.get("source_dirs")
+        self.source_files = state_dict.get("source_files")
         self.traj_index.fill_(state_dict.pop("traj_index"))
         self.num_steps.fill_(state_dict.pop("num_steps"))
         self.load(state_dict.pop("buffer_keys"))
+        if self.source_dirs is not None:
+            self.streams.clear()
         if self.retrieval is not None:
             self.streams.clear()
             self.retrieval.restore(state_dict.get("retrieval"))
@@ -98,10 +109,17 @@ class ReplayBuffer(datasets.Dataset):
         if self.save_trajectories:
 
             # Select Trajs
-            save_trajs = {traj_id:self.ram_buffer[traj_id] for traj_id in range(self.last_save_traj_index, self.traj_index)}
+            save_trajs = {traj_id:traj for traj_id, traj in self.ram_buffer.items()
+                          if traj_id >= self.last_save_traj_index}
 
             # Save Trajs
-            torch.save(save_trajs, os.path.join(self.buffer_dir, "{}.torch".format(self.traj_index)))
+            path = os.path.abspath(os.path.join(self.buffer_dir, "{}.torch".format(self.traj_index)))
+            # A final checkpoint can immediately follow a periodic save. Do not
+            # replace that trajectory file with an empty incremental save.
+            if self.last_save_traj_index != self.traj_index.item() or not os.path.isfile(path):
+                torch.save(save_trajs, path)
+            if path not in self.source_files:
+                self.source_files.append(path)
 
             # Update 
             self.last_save_traj_index = self.traj_index.item()
@@ -109,14 +127,20 @@ class ReplayBuffer(datasets.Dataset):
     def load(self, buffer_keys):
         
         # All Saves
-        for path_trajs in glob.glob(os.path.join(self.buffer_dir, "*.torch")):
+        # A shared checkpoint names its exact sources. Existing files in a new
+        # branch's output directory must not override that shared history.
+        directories = list(dict.fromkeys(self.source_dirs if self.source_dirs is not None else [self.buffer_dir]))
+        paths = (self.source_files if self.source_dirs is not None and self.source_files is not None else
+                 [os.path.abspath(path) for directory in directories for path in glob.glob(os.path.join(directory, "*.torch"))])
+        required = set(buffer_keys)
+        for path_trajs in paths:
 
             # Load Save
             load_trajs = torch.load(path_trajs)
 
             # Add required trajs
             for key, value in load_trajs.items():
-                if key in buffer_keys:
+                if key in required:
                     self.ram_buffer[key] = value
 
         # Assert all keys loaded
@@ -124,6 +148,7 @@ class ReplayBuffer(datasets.Dataset):
 
         # Update 
         self.last_save_traj_index = self.traj_index.item()
+        self.source_files = list(paths)
 
     def enforce_capacity(self):
 

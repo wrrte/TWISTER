@@ -800,6 +800,10 @@ class Model(modules.Module):
 
             raise e
 
+        finally:
+            if writer is not None:
+                writer.close()
+
     def _evaluate(self, dataset, writer, eval_steps=None, verbose=0, recompute_metrics=False, tag="Evaluation", verbose_progress_bar=1):
         
         # Evaluation Dataset

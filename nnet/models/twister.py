@@ -197,8 +197,10 @@ class TWISTER(models.Model):
 
         # Config asserts
         assert self.config.att_context_left <= self.config.L
-        if type(self.config.retrieval_enabled) is not bool:
-            raise ValueError("retrieval_enabled must be a JSON boolean")
+        if type(self.config.retrieval_enabled) is not bool and self.config.retrieval_enabled != "Both":
+            raise ValueError('retrieval_enabled must be a JSON boolean or "Both"')
+        if self.config.retrieval_enabled == "Both" and not self.config.load_replay_buffer_state_dict:
+            raise ValueError('retrieval_enabled="Both" requires load_replay_buffer_state_dict=True')
 
         # Create Training Envs
         self.env = envs.wrappers.BatchEnv([
@@ -310,6 +312,10 @@ class TWISTER(models.Model):
         if self.config.retrieval_enabled:
             from .twister_retrieval import TWISTERRetrieval
             self.retrieval = TWISTERRetrieval(self)
+        self.retrieval_run = None
+        if self.config.retrieval_enabled == "Both":
+            from .twister_branches import TWISTERRetrievalRun
+            self.retrieval_run = TWISTERRetrievalRun(self)
 
     def encode_obs(self, obs, sample_mode="probs"):
         return self.retrieval.encode_obs(obs, sample_mode=sample_mode)
@@ -349,6 +355,8 @@ class TWISTER(models.Model):
         return state
 
     def save(self, path, save_optimizer=True, keep_last_k=None):
+        if self.retrieval_run is not None:
+            self.replay_buffer.source_dirs = self.replay_buffer.source_dirs or []
         
         # Save Model Checkpoint
         torch.save({
@@ -357,7 +365,8 @@ class TWISTER(models.Model):
             "model_step": self.model_step,
             "grad_scaler_state_dict": self.grad_scaler.state_dict() if hasattr(self, "grad_scaler") else None,
             "replay_buffer_state_dict": self.replay_buffer.state_dict(),
-            **({"retrieval_state_dict": self.retrieval.state_dict()} if self.retrieval is not None else {})
+            **({"retrieval_state_dict": self.retrieval.state_dict()} if self.retrieval is not None else {}),
+            **({"retrieval_run_state": self.retrieval_run.state_dict()} if self.retrieval_run is not None else {})
         }, path)
         
         # Save Buffer
@@ -394,6 +403,8 @@ class TWISTER(models.Model):
 
         # Load Model Checkpoint
         checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        if checkpoint.get("retrieval_run_state") is not None and not self.config.load_replay_buffer_state_dict:
+            raise ValueError("Resuming a TWISTER retrieval run requires load_replay_buffer_state_dict=True")
 
         # Load Model State Dict
         self.load_state_dict({key:value for key, value in checkpoint["model_state_dict"].items()}, strict=strict)
@@ -418,6 +429,11 @@ class TWISTER(models.Model):
 
         if self.retrieval is not None:
             self.retrieval.load_state_dict(checkpoint.get("retrieval_state_dict"))
+        if checkpoint.get("retrieval_run_state") is not None:
+            from .twister_branches import TWISTERRetrievalRun
+            if self.retrieval_run is None:
+                self.retrieval_run = TWISTERRetrievalRun(self)
+            self.retrieval_run.load_state_dict(checkpoint["retrieval_run_state"])
 
         # Load Grad Scaler
         if "grad_scaler_state_dict" in checkpoint:
@@ -433,6 +449,10 @@ class TWISTER(models.Model):
         self.replay_buffer = replay_buffer
         if self.retrieval is not None:
             replay_buffer.enable_retrieval(self.config.num_envs)
+
+        self.reset_episode_history()
+
+    def reset_episode_history(self):
 
         # Set History
         obs_reset = self.env.reset()
@@ -466,12 +486,30 @@ class TWISTER(models.Model):
             self.add_info(key, value)
 
     def on_train_begin(self):
+        if self.retrieval_run is not None:
+            self.retrieval_run.on_train_begin()
 
         # Pre Fill Buffer
         if self.config.pre_fill_steps > 0 and self.replay_buffer.num_steps < self.config.pre_fill_steps:
             print("Prefill dataset with {} steps, policy={}".format(self.config.pre_fill_steps, "random" if self.config.random_pre_fill_steps else "sample"))
             while self.replay_buffer.num_steps < self.config.pre_fill_steps:
                 self.env_step()
+                if self.retrieval_run is not None:
+                    self.retrieval_run.maybe_split()
+
+    def on_epoch_begin(self, epoch):
+        if self.retrieval_run is not None:
+            self.retrieval_run.set_epoch_length()
+
+    def on_epoch_end(self, *args, **kwargs):
+        if self.retrieval_run is not None:
+            self.replay_buffer.epoch_length = self.config.epoch_length
+        return super().on_epoch_end(*args, **kwargs)
+
+    def on_step_end(self, *args, **kwargs):
+        if self.retrieval_run is not None:
+            self.retrieval_run.maybe_split()
+        return super().on_step_end(*args, **kwargs)
 
     def compile(self):
         
@@ -519,6 +557,11 @@ class TWISTER(models.Model):
         self.compiled = True
 
     def env_step(self):
+        active = None
+        if self.retrieval_run is not None and self.retrieval_run.shared:
+            active = self.retrieval_run.active_environments()
+            if not any(active):
+                return
 
         # Eval Mode
         training = self.training
@@ -587,20 +630,22 @@ class TWISTER(models.Model):
         # Env Step
         if (self.replay_buffer.num_steps < self.config.pre_fill_steps) and self.config.random_pre_fill_steps:
             action = self.env.sample()
-        obs = self.env.step(action.argmax(dim=-1) if self.config.policy_discrete else action)
+        env_action = action.argmax(dim=-1) if self.config.policy_discrete else action
+        obs = self.env.step(env_action) if active is None else self.env.step(env_action, active=active)
 
         ###############################################################################
         # Update Infos / Buffer
         ###############################################################################
 
         # Update training_infos
-        self.action_step += self.env.action_repeat * self.config.num_envs
+        self.action_step += self.env.action_repeat * (self.config.num_envs if active is None else sum(active))
         self.ep_rewards += obs.reward.to(self.ep_rewards.device)
 
         # Update History State
         self.episode_history.state = obs.state
         self.episode_history.hidden = hidden
-        self.episode_history.ep_step += self.env.action_repeat
+        self.episode_history.ep_step += (self.env.action_repeat if active is None else
+                                        torch.tensor(active) * self.env.action_repeat)
         # Update History Episodes
         for env_i in range(self.config.num_envs):
             if not obs.error[env_i]:
@@ -632,6 +677,8 @@ class TWISTER(models.Model):
         ###############################################################################
 
         # Is_last / Time Limit
+        if self.retrieval_run is not None and self.retrieval_run.shared:
+            self.retrieval_run.mark_boundaries(obs, active)
         for env_i in range(self.config.num_envs):
             if obs.is_last[env_i]:
 

@@ -44,14 +44,23 @@ class BatchEnv:
 
         return actions
     
-    def step(self, actions):
+    def step(self, actions, active=None):
 
         # Env step loop
         batch_obs = structs.AttrDict()
         for i, env in enumerate(self.envs):
 
             # Env Step
-            obs = env.step(actions[i])
+            if active is None or active[i]:
+                obs = env.step(actions[i])
+                if active is not None:
+                    self._last_observations[i] = obs
+            else:
+                # A paused environment contributes no transition or reward.
+                obs = structs.AttrDict(self._last_observations[i])
+                obs.reward = torch.zeros_like(obs.reward)
+                obs.is_last = torch.zeros_like(obs.is_last)
+                obs.error = torch.ones_like(obs.error)
 
             for key, value in obs.items():
 
@@ -76,10 +85,12 @@ class BatchEnv:
 
         # Env step loop
         batch_obs = structs.AttrDict()
+        self._last_observations = []
         for i, env in enumerate(self.envs):
 
             # Reset
             obs = env.reset()
+            self._last_observations.append(obs)
 
             for key, value in obs.items():
 
@@ -95,4 +106,3 @@ class BatchEnv:
             batch_obs[key] = torch.stack(batch_obs[key], dim=0)
 
         return batch_obs
-

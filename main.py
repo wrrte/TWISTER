@@ -27,6 +27,7 @@ import os
 import argparse
 import importlib
 import warnings
+from retrieval_runs import prepare_retrieval_run, fit_retrieval_run
 
 # Disable Warnings
 warnings.filterwarnings("ignore")
@@ -41,10 +42,13 @@ def main(args):
     print("Mode: {}".format(args.mode))
 
     # Load Config
+    retrieval_plan = prepare_retrieval_run(args)
     args.config = importlib.import_module(args.config_file.replace(".py", "").replace("/", "."))
 
     # Load Model
     model = functions.load_model(args)
+    if model.retrieval_run is not None:
+        model.retrieval_run.configure(args.config.callback_path, retrieval_plan)
 
     # Load Dataset
     dataset_train, dataset_eval = functions.load_datasets(args)
@@ -56,11 +60,12 @@ def main(args):
     # Training
     if args.mode == "training":
 
-        model.fit(
+        fit_retrieval_run(model, args, dict(
             dataset_train=dataset_train, 
             epochs=getattr(args.config, "epochs", 1000), 
             dataset_eval=dataset_eval, 
-            initial_epoch=int(args.checkpoint.split("_")[2]) if args.checkpoint != None else 0, 
+            initial_epoch=(int(model.model_step) // model.config.epoch_length if model.retrieval_run is not None
+                           else int(args.checkpoint.split("_")[2]) if args.checkpoint != None else 0),
             callback_path=args.config.callback_path,
             precision=getattr(args.config, "precision", torch.float32),
             accumulated_steps=getattr(args.config, "accumulated_steps", 1),
@@ -76,7 +81,7 @@ def main(args):
             wandb_logging=args.wandb,
             verbose_progress_bar=args.verbose_progress_bar,
             keep_last_k=args.keep_last_k
-        )
+        ))
 
     # Evaluation
     elif args.mode == "evaluation":
@@ -101,6 +106,8 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--checkpoint",           type=str,   default=None,                                                       help="Load model from checkpoint name")
     parser.add_argument("--cpu",                        action="store_true",                                                            help="Load model on cpu")
     parser.add_argument("--load_last",                  action="store_true",                                                            help="Load last model checkpoint")
+    parser.add_argument("--shared_warmup", type=str, default=None, help="TWISTER shared_warmup directory")
+    parser.add_argument("--retrieval_branch", choices=("on", "off"), default=None, help="Run one branch from --shared_warmup")
     parser.add_argument("--wandb",                      action="store_true",                                                            help="Initialize wandb logging")
     parser.add_argument("--verbose_progress_bar",       type=int,   default=1,                                                          help="Verbose level of progress bar display")
 

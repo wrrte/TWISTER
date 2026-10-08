@@ -89,7 +89,7 @@ class DeepMindControlEnv:
         return action
 
     def set_seed(self, seed):
-        self.env.seed(seed)
+        self.env.task.random.seed(seed)
 
     def random_seed(self):
         self.set_seed(random.randint(0, sys.maxsize))

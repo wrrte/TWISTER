@@ -113,7 +113,8 @@ Store persistent run settings in **`configs/defaults.json`**. Both the entry poi
 branch selection and `configs/twister.py` use the same resolved settings. The
 priority is model fallbacks, then this JSON file, then `override_config` from the
 launch environment. Nested objects merge recursively; overriding one retrieval
-setting preserves all the other file settings.
+setting preserves all the other file settings. For `seed`, the `--seed` command-line
+option has the highest priority.
 
 The current file selects `Both`, `num_envs=4`, `warmup_steps=50000`,
 `trigger_mode="z_score"`, `z_score_threshold=3.5`, and
@@ -122,6 +123,24 @@ The current file selects `Both`, `num_envs=4`, `warmup_steps=50000`,
 ```bash
 env_name=atari100k-seaquest run_name=twister_compare python3 main.py
 ```
+
+Specify a run seed with `--seed` (also supported for DMC and single ON/OFF runs):
+
+```bash
+env_name=atari100k-seaquest run_name=twister_seed42 python3 main.py --seed 42
+```
+
+The seed applies to Python, NumPy, PyTorch CPU/CUDA, and the environments before
+network initialization and the first reset. It accepts 0 through 4294967295.
+Training environments receive `(seed + index) % (2**31 - 1)` and evaluation receives
+the next index. Store `"seed": 42` in `configs/defaults.json` for a persistent
+default; the shipped `"seed": null` retains the existing unseeded behavior.
+`override_config='{"seed":42}'` also works. Seeds control the random streams but
+do not force deterministic CUDA operations.
+
+`Both` saves the resolved seed along with the configuration. Each branch restores
+the checkpoint RNG and saved environment reset seeds. Manual branch resumes should
+omit `--seed` or supply the saved value; a conflicting value is rejected.
 
 Override only a specific option for one run:
 

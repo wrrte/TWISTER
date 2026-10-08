@@ -7,6 +7,7 @@ import numpy as np
 
 from retrieval_runs import SharedWarmupComplete
 from training_branches import capture_rng_state, restore_rng_state
+from seeding import seed_environment
 
 
 class TWISTERRetrievalRun:
@@ -67,13 +68,7 @@ class TWISTERRetrievalRun:
             environments.append(self.model.env_eval)
         for index, env in enumerate(environments):
             seed = (self.reset_seed + index) % (2 ** 31 - 1) + 1
-            if self.model.env_type == "atari100k":
-                env.seed(seed)
-            else:
-                # DMC's task owns its RandomState; its environment has no Gym seed API.
-                while type(env).__name__ in ("ResetOnException", "TimeLimit"):
-                    env = env.env
-                env.env.task.random.seed(seed)
+            seed_environment(env, seed, self.model.env_type)
 
     def on_train_begin(self):
         if self.resume_rng is not None:

@@ -29,6 +29,7 @@ import copy
 import itertools
 import os
 import glob
+from seeding import seed_everything, seed_environment
 
 class TWISTER(models.Model):
 
@@ -79,6 +80,7 @@ class TWISTER(models.Model):
         self.config.train_env_params = {}
 
         # Training
+        self.config.seed = None
         self.config.batch_size = 16
         self.config.L = 64
         self.config.H = 15
@@ -202,6 +204,8 @@ class TWISTER(models.Model):
         if self.config.retrieval_enabled == "Both" and not self.config.load_replay_buffer_state_dict:
             raise ValueError('retrieval_enabled="Both" requires load_replay_buffer_state_dict=True')
 
+        seed_everything(self.config.seed)
+
         # Create Training Envs
         self.env = envs.wrappers.BatchEnv([
             envs.wrappers.ResetOnException(
@@ -222,6 +226,11 @@ class TWISTER(models.Model):
             )
         else:
             self.env_eval = None
+
+        if self.config.seed is not None:
+            environments = list(self.env.envs) + ([self.env_eval] if self.env_eval is not None else [])
+            for index, env in enumerate(environments):
+                seed_environment(env, (self.config.seed + index) % (2 ** 31 - 1), self.env_type)
 
         # Networks
         feat_size = self.config.model_stoch_size * self.config.model_discrete + self.config.model_hidden_size if self.config.model_discrete else self.config.model_stoch_size + self.config.model_hidden_size

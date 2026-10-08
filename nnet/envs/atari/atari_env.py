@@ -119,7 +119,7 @@ class AtariEnv:
         self.fps = 60.0 / self.action_repeat
 
     def seed(self, seed):
-        if seed:
+        if seed is not None:
             self.env.seed(seed)
 
     def sample(self):

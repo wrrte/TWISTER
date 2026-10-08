@@ -41,6 +41,80 @@ We also provide the implementation for training on DeepMind Control tasks.
 env_name=dmc-Acrobot-swingup run_name=dmc python3 main.py
 ```
 
+### Run seed
+
+Pass `--seed` to seed Python, NumPy, PyTorch (CPU and CUDA), and the training and
+evaluation environments before model initialization and the first episode:
+
+```bash
+env_name=atari100k-seaquest run_name=twister_seed42 python3 main.py --seed 42
+env_name=dmc-Acrobot-swingup run_name=dmc_seed42 python3 main.py --seed 42
+```
+
+Seeds accept integers from 0 through 4294967295. Training environments use
+`(seed + environment_index) % (2**31 - 1)`; evaluation uses the next index.
+Set `"seed": 42` in [configs/defaults.json](configs/defaults.json) for a persistent
+default, or use `override_config='{"seed":42}'`. The priority is `--seed`, then
+`override_config`, then the defaults file. The shipped `"seed": null` keeps the
+existing behavior when no seed is specified.
+
+`Both` records the resolved seed and restores the shared checkpoint RNG in each
+branch. When manually resuming a branch, omit `--seed` or use its saved value.
+The saved checkpoint RNG takes precedence over restarting the seed sequence.
+The seed controls randomness; CUDA operations can still be nondeterministic.
+
+### GPU job queues
+
+`6_run_twister_train.sh` and `7_run_twister_train.sh` now run persistent queue
+workers. Start each in a separate terminal using your TWISTER Python environment:
+
+```bash
+bash 6_run_twister_train.sh
+bash 7_run_twister_train.sh
+```
+
+Each worker sets `CUDA_VISIBLE_DEVICES` and queries that same NVIDIA GPU index
+to choose a queue in the TWISTER directory:
+
+| GPU model | Queue file |
+| --- | --- |
+| RTX 3090 | `job_queue_3090.txt` |
+| RTX A6000 | `job_queue_A6000.txt` |
+| TITAN RTX | `job_queue_titan.txt` |
+| RTX PRO 6000 Blackwell | `job_queue_pro6k.txt` |
+| Other models | `job_queue_default.txt` |
+
+Put one complete shell command on each line, including any `env_name`,
+`run_name`, `override_config`, and `--seed` settings. Blank lines and lines
+starting with `#` are ignored. The previous GPU 6/7 commands are in
+`job_queue_3090.txt`; the two Gopher runs have seed-specific run names so their
+outputs do not overlap when executed concurrently. Use distinct run names for
+additional jobs on the same environment.
+
+Workers of the same GPU model share a queue. `flock` on the matching
+`job_queue_*.lock` file protects removing the first command so concurrent workers
+do not take the same entry. Commands run sequentially on each worker, from the
+TWISTER directory, using the inherited Python environment. A command is removed
+before execution; failures are logged and the worker continues without retrying.
+Empty queues are checked every 10 seconds. Stop a worker with Ctrl+C.
+
+When adding jobs while workers are running, use the same lock:
+
+```bash
+flock job_queue_3090.lock bash -c 'cat >> job_queue_3090.txt' <<'JOBS'
+env_name=atari100k-alien run_name=atari100k_seed42 python3 -u main.py --seed 42
+JOBS
+```
+
+Use the common worker for any other GPU, or pass an explicit queue file:
+
+```bash
+bash run_twister_queue.sh 0
+bash run_twister_queue.sh 7 job_queue_custom.txt
+# The GPU-specific wrappers also accept an explicit queue file:
+bash 7_run_twister_train.sh job_queue_custom.txt
+```
+
 ### Visualize experiments
 
 ```
@@ -54,6 +128,7 @@ It currently contains:
 
 ```json
 {
+  "seed": null,
   "retrieval_enabled": "Both",
   "num_envs": 4,
   "retrieval": {

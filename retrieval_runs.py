@@ -7,7 +7,7 @@ import sys
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 from training_branches import launch_training_branches
-from configuration import load_run_config, set_run_config
+from configuration import load_run_config, set_run_config, validate_seed
 
 
 class SharedWarmupComplete(BaseException):
@@ -30,6 +30,12 @@ def prepare_retrieval_run(args):
         if plan.get("version") != 1:
             raise ValueError("Unsupported TWISTER shared-warmup version")
         override = dict(plan["override_config"], retrieval_enabled=branch == "on")
+        seed = getattr(args, "seed", None)
+        if seed is not None:
+            validate_seed(seed)
+            if seed != override.get("seed"):
+                raise ValueError("--seed must match the saved shared-warmup seed; "
+                                 "branches restore the checkpoint RNG state")
         set_run_config(override)
         os.environ["env_name"] = plan["env_name"]
         os.environ["run_name"] = plan["run_name"] + ("_O" if branch == "on" else "_X")
@@ -37,7 +43,7 @@ def prepare_retrieval_run(args):
         args.checkpoint = str(directory / plan["checkpoint"])
         return plan
 
-    override = load_run_config()
+    override = load_run_config(seed=getattr(args, "seed", None))
     set_run_config(override)
     if override.get("retrieval_enabled") != "Both":
         return None

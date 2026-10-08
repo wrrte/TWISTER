@@ -106,6 +106,7 @@ if __name__ == "__main__":
     parser.add_argument("-i", "--checkpoint",           type=str,   default=None,                                                       help="Load model from checkpoint name")
     parser.add_argument("--cpu",                        action="store_true",                                                            help="Load model on cpu")
     parser.add_argument("--load_last",                  action="store_true",                                                            help="Load last model checkpoint")
+    parser.add_argument("--seed", type=int, default=None, help="Run seed (0 through 4294967295); overrides defaults.json and override_config")
     parser.add_argument("--shared_warmup", type=str, default=None, help="TWISTER shared_warmup directory")
     parser.add_argument("--retrieval_branch", choices=("on", "off"), default=None, help="Run one branch from --shared_warmup")
     parser.add_argument("--wandb",                      action="store_true",                                                            help="Initialize wandb logging")

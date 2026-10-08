@@ -27,15 +27,26 @@ def _merge(base, override):
     return result
 
 
-def load_run_config():
+def validate_seed(seed):
+    if seed is not None and (type(seed) is not int or not 0 <= seed < 2 ** 32):
+        raise ValueError("seed must be null or an integer between 0 and 4294967295")
+    return seed
+
+
+def load_run_config(seed=None):
     defaults = _json_object(DEFAULTS_PATH.read_text(encoding="utf-8"), str(DEFAULTS_PATH))
     override = _json_object(os.environ.get("override_config", "{}"), "override_config")
-    return _merge(defaults, override)
+    config = _merge(defaults, override)
+    if seed is not None:
+        config["seed"] = seed
+    validate_seed(config.get("seed"))
+    return config
 
 
 def set_run_config(config):
     """Freeze effective settings before model construction, including saved branches."""
     global _resolved_config
+    validate_seed(config.get("seed"))
     _resolved_config = copy.deepcopy(config)
     # Custom Python configs can continue reading the existing environment API.
     os.environ["override_config"] = json.dumps(config)

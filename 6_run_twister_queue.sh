@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Change this number to select the NVIDIA GPU for this worker.
-readonly GPU_ID=7
+readonly GPU_ID=6
 
 if (( $# > 1 )); then
     echo "Usage: $0 [QUEUE_FILE] (configured GPU_ID: $GPU_ID)" >&2

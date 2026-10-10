@@ -1,3 +1,6 @@
-env_name=atari100k-gopher run_name=atari100k_seed3100 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3120
-env_name=atari100k-gopher run_name=atari100k_seed3100 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3130
-env_name=atari100k-gopher run_name=atari100k_seed3100 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3140
+env_name=atari100k-gopher run_name=atari100k_seed3120 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3120
+env_name=atari100k-gopher run_name=atari100k_seed3130 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3130
+env_name=atari100k-gopher run_name=atari100k_seed3140 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3140
+env_name=atari100k-gopher run_name=atari100k_seed3150 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3150
+env_name=atari100k-gopher run_name=atari100k_seed3160 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3160
+env_name=atari100k-gopher run_name=atari100k_seed3170 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3170

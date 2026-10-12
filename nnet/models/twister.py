@@ -92,6 +92,7 @@ class TWISTER(models.Model):
 
         # Eval
         self.config.eval_episodes = {"dmc": 10, "atari100k": 100}[self.env_type]
+        self.config.num_eval_envs = 1
 
         # Optimizer
         self.config.opt_weight_decay = 0.0
@@ -210,6 +211,8 @@ class TWISTER(models.Model):
             raise ValueError('retrieval_enabled must be a JSON boolean or "Both"')
         if self.config.retrieval_enabled == "Both" and not self.config.load_replay_buffer_state_dict:
             raise ValueError('retrieval_enabled="Both" requires load_replay_buffer_state_dict=True')
+        if type(self.config.num_eval_envs) is not int or self.config.num_eval_envs < 1:
+            raise ValueError('num_eval_envs must be a positive integer')
 
         seed_everything(self.config.seed)
 
@@ -1289,6 +1292,18 @@ class TWISTER(models.Model):
         if self.config.group_contrastive_augments:
             return grouped_random_resized_crop(images, self.config.contrastive_augments)
         return torch.stack([self.config.contrastive_augments(image) for image in images], dim=0)
+
+    def evaluate(self, dataset_eval, eval_steps=None, verbose=0, recompute_metrics=False, verbose_progress_bar=1):
+        if self.config.num_eval_envs == 1:
+            return super().evaluate(dataset_eval, eval_steps, verbose, recompute_metrics, verbose_progress_bar)
+
+        from .twister_evaluation import evaluate_parallel
+        num_episodes = len(dataset_eval)
+        if eval_steps is not None:
+            num_episodes = min(num_episodes, eval_steps)
+        self.eval()
+        self.reset_infos()
+        return evaluate_parallel(self, num_episodes, verbose_progress_bar)
 
     def play(self, verbose=False, return_att_w=False):
 

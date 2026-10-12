@@ -1,6 +1,18 @@
-env_name=atari100k-gopher run_name=atari100k_seed3120 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3120
-env_name=atari100k-gopher run_name=atari100k_seed3130 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3130
-env_name=atari100k-gopher run_name=atari100k_seed3140 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3140
-env_name=atari100k-gopher run_name=atari100k_seed3150 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3150
-env_name=atari100k-gopher run_name=atari100k_seed3160 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3160
-env_name=atari100k-gopher run_name=atari100k_seed3170 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3170
+env_name=atari100k-gopher run_name=atari100k_seed3120 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3120 --mode evaluation --load_last
+env_name=atari100k-gopher run_name=atari100k_seed3130 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3130 --mode evaluation --load_last
+env_name=atari100k-gopher run_name=atari100k_seed3140 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3140 --mode evaluation --load_last
+env_name=atari100k-gopher run_name=atari100k_seed3150 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3150 --mode evaluation --load_last
+env_name=atari100k-gopher run_name=atari100k_seed3160 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3160 --mode evaluation --load_last
+env_name=atari100k-gopher run_name=atari100k_seed3170 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3170 --mode evaluation --load_last
+
+env_name=atari100k-gopher \
+run_name=atari100k_seed3100 \
+override_config='{"retrieval_enabled":false,"eval_episodes":3,"load_replay_buffer_state_dict":false}' \
+python3 -u main.py --seed 3100 --mode evaluation --load_last \
+  --verbose_progress_bar 2
+  
+env_name=atari100k-gopher \
+run_name=atari100k_seed3090 \
+override_config='{"retrieval_enabled":false,"eval_episodes":3,"load_replay_buffer_state_dict":false}' \
+python3 -u main.py --seed 3090 --mode evaluation --load_last \
+  --verbose_progress_bar 2

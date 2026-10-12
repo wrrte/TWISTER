@@ -214,6 +214,24 @@ for the count formulas, ON/OFF output paths, resume commands, and verification.
 env_name=atari100k-alien run_name=atari100k_O override_config='{"retrieval_enabled":true}' python3 main.py --load_last --mode evaluation
 ```
 
+Set `num_eval_envs` to batch policy/world-model inference for multiple independent
+games using one model on the GPU. Atari environment steps also run in worker
+threads. The default is `1`, which retains the original sequential evaluator.
+`eval_episodes` remains the total number of games, including a partial final batch:
+
+```bash
+env_name=atari100k-gopher run_name=atari100k_seed3120 override_config='{"retrieval_enabled":false,"load_replay_buffer_state_dict":false,"eval_episodes":100,"num_eval_envs":8}' python3 -u main.py --seed 3120 --mode evaluation --load_last --verbose_progress_bar 2
+```
+
+Start with 4 or 8 environments; speedup depends on episode lengths, CPU capacity
+and GPU memory. The progress bar counts completed episodes. Finished lanes are
+removed from the inference batch, and each new group starts with fresh recurrent
+state. The first environment keeps the original evaluation seed; extra environments
+use subsequent seeds. Batched latent sampling consumes RNG differently, so scores
+can differ from sequential evaluation even with the same run seed. Keep the same
+`num_eval_envs` when comparing runs. `num_envs` still controls training environments.
+For DMC, model inference is batched but rendering/stepping stays on the main thread.
+
 ## Script options
 
 ```

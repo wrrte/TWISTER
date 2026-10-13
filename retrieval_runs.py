@@ -96,16 +96,10 @@ def fit_retrieval_run(model, args, fit_kwargs):
         if run.shared:
             raise RuntimeError("Training budget ended before all warmup episodes finished; "
                                "increase epochs or lower retrieval.warmup_steps. No branches were launched.")
-        # Always retain the completed branch, even between periodic saves.
-        model.save(str(Path(args.config.callback_path) /
-                       f"checkpoints_epoch_{model.config.epochs}_step_{int(model.model_step)}.ckpt"))
     except SharedWarmupComplete as event:
         completed = event.directory
     finally:
         close_environments(model)
-        if args.wandb:
-            import wandb
-            wandb.finish()
     if completed is not None:
         enabled, disabled = branch_commands(completed)
         launch_training_branches(completed, enabled, disabled)

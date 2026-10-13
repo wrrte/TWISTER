@@ -94,6 +94,9 @@ class TWISTER(models.Model):
         self.config.eval_episodes = {"dmc": 10, "atari100k": 100}[self.env_type]
         self.config.num_eval_envs = 1
         self.config.eval_env_backend = "process"
+        self.config.final_eval_enabled = True
+        self.config.final_eval_episodes = 100
+        self.config.final_eval_num_envs = 32
 
         # Optimizer
         self.config.opt_weight_decay = 0.0
@@ -216,6 +219,11 @@ class TWISTER(models.Model):
             raise ValueError('num_eval_envs must be a positive integer')
         if self.config.eval_env_backend not in ("process", "thread"):
             raise ValueError('eval_env_backend must be "process" or "thread"')
+        if type(self.config.final_eval_enabled) is not bool:
+            raise ValueError('final_eval_enabled must be a JSON boolean')
+        for key in ("final_eval_episodes", "final_eval_num_envs"):
+            if type(self.config[key]) is not int or self.config[key] < 1:
+                raise ValueError('{} must be a positive integer'.format(key))
 
         seed_everything(self.config.seed)
 
@@ -526,6 +534,38 @@ class TWISTER(models.Model):
     def on_epoch_begin(self, epoch):
         if self.retrieval_run is not None:
             self.retrieval_run.set_epoch_length()
+
+    def on_train_end(self, callback_path, epochs, writer, wandb_run, verbose_progress_bar, keep_last_k):
+        # Shared warmup is an intermediate boundary, not a completed agent.
+        if self.retrieval_run is not None and self.retrieval_run.shared:
+            return
+        checkpoint = None
+        if callback_path is not None:
+            checkpoint = os.path.join(callback_path, "checkpoints_epoch_{}_step_{}.ckpt".format(epochs, int(self.model_step)))
+            self.save(checkpoint, keep_last_k=keep_last_k)
+        if not self.config.final_eval_enabled:
+            return
+
+        from .twister_evaluation import evaluate_final
+        losses, metrics = evaluate_final(self, verbose_progress_bar)
+        self.print_step(losses, metrics, "final eval")
+        if writer is not None:
+            # Keep the dataset-indexed TensorBoard tag separate from direct wandb metrics.
+            self.log_step(losses, metrics, {}, writer, self.model_step, "Evaluation-final/0")
+            writer.flush()
+        if wandb_run is not None:
+            results = {"Evaluation-final/" + key: float(value) for key, value in metrics.items()}
+            results.update({
+                "Evaluation-final/episodes": self.config.final_eval_episodes,
+                "Evaluation-final/num_envs": min(self.config.final_eval_num_envs, self.config.final_eval_episodes),
+                "Evaluation-final/model_step": int(self.model_step),
+                "Evaluation-final/action_step": int(self.action_step),
+            })
+            # TensorBoard sync uses its own step counter; record model_step explicitly.
+            wandb_run.log(results)
+            wandb_run.summary.update(results)
+            if checkpoint is not None:
+                wandb_run.summary["Evaluation-final/checkpoint"] = checkpoint
 
     def on_epoch_end(self, *args, **kwargs):
         if self.retrieval_run is not None:

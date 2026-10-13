@@ -531,6 +531,9 @@ class Model(modules.Module):
     def on_epoch_begin(self, epoch):
         pass
 
+    def on_train_end(self, callback_path, epochs, writer, wandb_run, verbose_progress_bar, keep_last_k):
+        pass
+
     def on_epoch_end(self, evaluate, save, log_figure, callback_path, epoch, inputs, targets, dataset_eval, eval_steps, verbose_eval, writer, recompute_metrics, keep_last_k):
         self.on_step_end(evaluate, save, log_figure, callback_path, epoch, epoch, inputs, targets, dataset_eval, eval_steps, verbose_eval, writer, recompute_metrics, keep_last_k=keep_last_k, tag="epoch")
 
@@ -647,9 +650,10 @@ class Model(modules.Module):
     ):
         
         # Init wandb
+        wandb_run = None
         if callback_path is not None and wandb_logging:
             try:
-                wandb.init(project='nnet', sync_tensorboard=True, name=callback_path)
+                wandb_run = wandb.init(project='nnet', sync_tensorboard=True, name=callback_path)
             except Exception as e:
                 print(str(e))
 
@@ -800,6 +804,9 @@ class Model(modules.Module):
                     keep_last_k=keep_last_k
                 )
 
+            # Only reached after the entire training budget completes successfully.
+            self.on_train_end(callback_path, epochs, writer, wandb_run, verbose_progress_bar, keep_last_k)
+
         # Exception Handler
         except Exception as e:
 
@@ -811,6 +818,8 @@ class Model(modules.Module):
         finally:
             if writer is not None:
                 writer.close()
+            if wandb_run is not None:
+                wandb_run.finish()
 
     def _evaluate(self, dataset, writer, eval_steps=None, verbose=0, recompute_metrics=False, tag="Evaluation", verbose_progress_bar=1):
         

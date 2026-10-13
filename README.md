@@ -133,6 +133,9 @@ It currently contains:
   "seed": null,
   "retrieval_enabled": "Both",
   "num_envs": 4,
+  "final_eval_enabled": true,
+  "final_eval_episodes": 100,
+  "final_eval_num_envs": 32,
   "retrieval": {
     "warmup_steps": 50000,
     "trigger_mode": "z_score",
@@ -154,6 +157,40 @@ Other model hyperparameters can also be overridden:
 ```
 env_name=atari100k-alien run_name=atari100k override_config='{"num_envs": 4, "epochs": 100, "eval_episode_saving_path": "./videos"}' python3 main.py
 ```
+
+### Final checkpoint evaluation
+
+After successful training, TWISTER always saves the final checkpoint, including
+when the last epoch falls between periodic saves. For the default Atari100k budget
+this is `checkpoints_epoch_50_step_100000.ckpt`. By default it then evaluates
+exactly 100 completed episodes with up to 32 evaluation environments. This uses
+the saved weights already in memory, fresh seeded environments, and the existing
+evaluation backend; no replay buffer is reloaded. Periodic evaluation settings
+(`eval_episodes` and `num_eval_envs`) are independent of these final settings.
+
+Pass `--wandb` when training to record `Evaluation-final/score` (mean episode
+return), `Evaluation-final/steps`, episode count, environment count, and model/action
+steps in the same training run's history and summary. The summary also records
+the checkpoint path. TensorBoard receives the final score and episode length under
+`Evaluation-final/0` even without `--wandb`. Logging finishes after final evaluation. With retrieval `Both`,
+each completed ON/OFF branch receives its own final evaluation; shared warmup does
+not.
+
+```bash
+env_name=atari100k-gopher run_name=atari100k_seed3110 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 3110 --wandb
+```
+
+Set `"final_eval_enabled": false` in `configs/defaults.json` or override it for one
+launch to skip final evaluation:
+
+```bash
+env_name=atari100k-gopher run_name=atari100k_seed3110 override_config='{"retrieval_enabled":false,"final_eval_enabled":false}' python3 -u main.py --seed 3110 --wandb
+```
+
+`final_eval_episodes` and `final_eval_num_envs` can also be changed in the defaults
+file or `override_config`. They must be positive integers. Interrupted or failed
+training does not trigger final evaluation; `--mode evaluation` keeps its existing
+behavior.
 
 ### Training performance
 

@@ -8,7 +8,35 @@ import torch
 from tqdm import tqdm
 
 from nnet.envs.wrappers import ResetOnException, TimeLimit
-from seeding import seed_environment
+from seeding import seed_environment, seed_everything
+
+
+def evaluate_final(model, verbose_progress_bar=1):
+    """Evaluate saved final weights on fresh environments without loading replay."""
+    from nnet.datasets import VoidDataset
+
+    dataset = VoidDataset(model.config.final_eval_episodes)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=1, collate_fn=dataset.collate_fn)
+    previous_env = model.env_eval
+    previous_num_envs = model.config.num_eval_envs
+    previous_mode = model.training
+    model.env_eval = None
+    try:
+        model.config.num_eval_envs = model.config.final_eval_num_envs
+        seed_everything(model.config.seed)
+        model.env_eval = ResetOnException(TimeLimit(
+            model.config.env_class(**dict(model.config.env_params, **model.config.eval_env_params)),
+            time_limit=model.config.time_limit_eval))
+        if model.config.seed is not None:
+            seed_environment(model.env_eval, (model.config.seed + model.config.num_envs) % (2 ** 31 - 1),
+                             model.env_type)
+        return model.evaluate(loader, verbose_progress_bar=verbose_progress_bar)
+    finally:
+        if model.env_eval is not None:
+            _close_environment(model.env_eval)
+        model.env_eval = previous_env
+        model.config.num_eval_envs = previous_num_envs
+        model.train(previous_mode)
 
 
 class _EvaluationProgress(tqdm):

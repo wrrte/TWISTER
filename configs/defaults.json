@@ -2,6 +2,9 @@
   "seed": null,
   "retrieval_enabled": "Both",
   "num_envs": 4,
+  "final_eval_enabled": true,
+  "final_eval_episodes": 100,
+  "final_eval_num_envs": 32,
   "retrieval": {
     "warmup_steps": 50000,
     "trigger_mode": "z_score",

@@ -215,22 +215,31 @@ env_name=atari100k-alien run_name=atari100k_O override_config='{"retrieval_enabl
 ```
 
 Set `num_eval_envs` to batch policy/world-model inference for multiple independent
-games using one model on the GPU. Atari environment steps also run in worker
-threads. The default is `1`, which retains the original sequential evaluator.
-`eval_episodes` remains the total number of games, including a partial final batch:
+games using one model on the GPU. Atari uses Gym's `AsyncVectorEnv`, with a
+dedicated process per emulator and shared memory for observations, as in STORM.
+Workers limit OpenCV/PyTorch to one CPU thread. The default is `1`, which retains
+the original sequential evaluator.
+`eval_episodes` remains the number of completed games included in the mean,
+even when it is not a multiple of `num_eval_envs`:
 
 ```bash
 env_name=atari100k-gopher run_name=atari100k_seed3120 override_config='{"retrieval_enabled":false,"load_replay_buffer_state_dict":false,"eval_episodes":100,"num_eval_envs":8}' python3 -u main.py --seed 3120 --mode evaluation --load_last --verbose_progress_bar 2
 ```
 
 Start with 4 or 8 environments; speedup depends on episode lengths, CPU capacity
-and GPU memory. The progress bar counts completed episodes. Finished lanes are
-removed from the inference batch, and each new group starts with fresh recurrent
-state. The first environment keeps the original evaluation seed; extra environments
+and GPU memory. The progress bar counts completed episodes. Completed Atari lanes
+immediately start another episode, keeping the inference batch full. Their latent
+state and previous action reset, and stale Transformer KV entries stay masked
+until the new episode fills its own context. Rewards include the terminal step;
+only the requested number of completed episodes contribute to the mean.
+The first environment keeps the original evaluation seed; extra environments
 use subsequent seeds. Batched latent sampling consumes RNG differently, so scores
 can differ from sequential evaluation even with the same run seed. Keep the same
 `num_eval_envs` when comparing runs. `num_envs` still controls training environments.
 For DMC, model inference is batched but rendering/stepping stays on the main thread.
+For a comparison with the earlier threaded evaluator, set
+`"eval_env_backend":"thread"`; Atari defaults to `"process"` when `num_eval_envs > 1`.
+Restart an existing evaluation process to use source changes.
 
 ## Script options
 

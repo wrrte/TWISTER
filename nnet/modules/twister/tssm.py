@@ -307,7 +307,7 @@ class TSSM(nn.Module):
         # Return Post
         return {"deter": deter, "hidden": hidden, **states}
 
-    def forward(self, states, prev_states, prev_actions, is_firsts, is_firsts_hidden=None, return_att_w=False, return_blocks_deter=False):
+    def forward(self, states, prev_states, prev_actions, is_firsts, is_firsts_hidden=None, return_att_w=False, return_blocks_deter=False, hidden_lengths=None):
 
         # (B, 1 or L, A)
         assert prev_actions.dim() == 3 
@@ -320,6 +320,14 @@ class TSSM(nn.Module):
 
         # Create right context mask (B, 1, L, Th+L)
         mask = modules.return_mask(seq_len=prev_actions.shape[1], hidden_len=self.get_hidden_len(prev_states["hidden"]), left_context=self.att_context_left, right_context=0, dtype=prev_actions.dtype, device=prev_actions.device)
+
+        # Evaluation can refill individual lanes while retaining a fixed batch.
+        # Mask stale KV entries until each new episode has filled its own context.
+        if hidden_lengths is not None:
+            hidden_len = self.get_hidden_len(prev_states["hidden"])
+            positions = torch.arange(hidden_len + prev_actions.shape[1], device=prev_actions.device)
+            valid = positions[None, :] >= hidden_len - hidden_lengths[:, None]
+            mask = mask * valid[:, None, None, :]
 
         # 1: Reset First States and Actions, necessary for traj buffer since some states will be reset mid-sequence
         # 2: Also Update mask to mask pre is_first positions

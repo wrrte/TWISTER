@@ -93,6 +93,7 @@ class TWISTER(models.Model):
         # Eval
         self.config.eval_episodes = {"dmc": 10, "atari100k": 100}[self.env_type]
         self.config.num_eval_envs = 1
+        self.config.eval_env_backend = "process"
 
         # Optimizer
         self.config.opt_weight_decay = 0.0
@@ -213,6 +214,8 @@ class TWISTER(models.Model):
             raise ValueError('retrieval_enabled="Both" requires load_replay_buffer_state_dict=True')
         if type(self.config.num_eval_envs) is not int or self.config.num_eval_envs < 1:
             raise ValueError('num_eval_envs must be a positive integer')
+        if self.config.eval_env_backend not in ("process", "thread"):
+            raise ValueError('eval_env_backend must be "process" or "thread"')
 
         seed_everything(self.config.seed)
 
@@ -1298,7 +1301,7 @@ class TWISTER(models.Model):
             return super().evaluate(dataset_eval, eval_steps, verbose, recompute_metrics, verbose_progress_bar)
 
         from .twister_evaluation import evaluate_parallel
-        num_episodes = len(dataset_eval)
+        num_episodes = len(getattr(dataset_eval, "dataset", dataset_eval))
         if eval_steps is not None:
             num_episodes = min(num_episodes, eval_steps)
         self.eval()

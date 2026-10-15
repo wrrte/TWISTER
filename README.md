@@ -133,6 +133,9 @@ It currently contains:
   "seed": null,
   "retrieval_enabled": "Both",
   "num_envs": 4,
+  "eval_during_training": false,
+  "eval_episodes": 5,
+  "num_eval_envs": 5,
   "final_eval_enabled": true,
   "final_eval_episodes": 100,
   "final_eval_num_envs": 32,
@@ -190,13 +193,21 @@ Evaluation and `pass` modes do not log in. Retrieval ON/OFF subprocesses preserv
 
 ### Final checkpoint evaluation
 
+Periodic evaluation during training is disabled by default. Set
+`"eval_during_training": true` in `configs/defaults.json` to enable it, or use
+`override_config='{"eval_during_training":true}'` for one launch. When enabled,
+it evaluates 5 episodes across 5 parallel environments at the configured
+`--eval_period_epoch` (default: every 5 epochs) or `--eval_period_step` intervals.
+`eval_episodes` and `num_eval_envs` control these counts. This switch affects both
+epoch and step evaluations; standalone `--mode evaluation` runs independently.
+
 After successful training, TWISTER always saves the final checkpoint, including
 when the last epoch falls between periodic saves. For the default Atari100k budget
 this is `checkpoints_epoch_50_step_100000.ckpt`. By default it then evaluates
 exactly 100 completed episodes with up to 32 evaluation environments. This uses
 the saved weights already in memory, fresh seeded environments, and the existing
-evaluation backend; no replay buffer is reloaded. Periodic evaluation settings
-(`eval_episodes` and `num_eval_envs`) are independent of these final settings.
+evaluation backend; no replay buffer is reloaded. Final evaluation runs
+independently of `eval_during_training`, `eval_episodes`, and `num_eval_envs`.
 
 W&B logging (enabled by default) records `Evaluation-final/score` (mean episode
 return), `Evaluation-final/steps`, episode count, environment count, and model/action
@@ -284,8 +295,8 @@ env_name=atari100k-alien run_name=atari100k_O override_config='{"retrieval_enabl
 Set `num_eval_envs` to batch policy/world-model inference for multiple independent
 games using one model on the GPU. Atari uses Gym's `AsyncVectorEnv`, with a
 dedicated process per emulator and shared memory for observations, as in STORM.
-Workers limit OpenCV/PyTorch to one CPU thread. The default is `1`, which retains
-the original sequential evaluator.
+Workers limit OpenCV/PyTorch to one CPU thread. The default is 5 episodes across
+5 parallel environments. Set `num_eval_envs` to `1` to use the sequential evaluator.
 `eval_episodes` remains the number of completed games included in the mean,
 even when it is not a multiple of `num_eval_envs`:
 

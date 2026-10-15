@@ -91,8 +91,9 @@ class TWISTER(models.Model):
         self.config.env_step_period = {"dmc": 512, "atari100k": 1024}[self.env_type] # call env_step (batch_size * L) / (env_step_period * num_envs) times
 
         # Eval
-        self.config.eval_episodes = {"dmc": 10, "atari100k": 100}[self.env_type]
-        self.config.num_eval_envs = 1
+        self.config.eval_during_training = False
+        self.config.eval_episodes = 5
+        self.config.num_eval_envs = 5
         self.config.eval_env_backend = "process"
         self.config.final_eval_enabled = True
         self.config.final_eval_episodes = 100
@@ -215,6 +216,8 @@ class TWISTER(models.Model):
             raise ValueError('retrieval_enabled must be a JSON boolean or "Both"')
         if self.config.retrieval_enabled == "Both" and not self.config.load_replay_buffer_state_dict:
             raise ValueError('retrieval_enabled="Both" requires load_replay_buffer_state_dict=True')
+        if type(self.config.eval_during_training) is not bool:
+            raise ValueError('eval_during_training must be a JSON boolean')
         if type(self.config.num_eval_envs) is not int or self.config.num_eval_envs < 1:
             raise ValueError('num_eval_envs must be a positive integer')
         if self.config.eval_env_backend not in ("process", "thread"):
@@ -588,10 +591,10 @@ class TWISTER(models.Model):
             self.replay_buffer.epoch_length = self.config.epoch_length
         return super().on_epoch_end(*args, **kwargs)
 
-    def on_step_end(self, *args, **kwargs):
+    def on_step_end(self, evaluate, *args, **kwargs):
         if self.retrieval_run is not None:
             self.retrieval_run.maybe_split()
-        return super().on_step_end(*args, **kwargs)
+        return super().on_step_end(evaluate and self.config.eval_during_training, *args, **kwargs)
 
     def compile(self):
         

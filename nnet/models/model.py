@@ -40,6 +40,7 @@ class Model(modules.Module):
         self.built = False
         self.name = name
         self.grad_scaler_state_dict = None
+        self.score_logger = None
 
     def compile(self, losses, loss_weights=None, optimizer="Adam", metrics=None, decoders=None):
 
@@ -534,6 +535,9 @@ class Model(modules.Module):
     def on_train_end(self, callback_path, epochs, writer, wandb_run, verbose_progress_bar, keep_last_k):
         pass
 
+    def on_evaluation_end(self, dataset, metrics, eval_steps):
+        pass
+
     def on_epoch_end(self, evaluate, save, log_figure, callback_path, epoch, inputs, targets, dataset_eval, eval_steps, verbose_eval, writer, recompute_metrics, keep_last_k):
         self.on_step_end(evaluate, save, log_figure, callback_path, epoch, epoch, inputs, targets, dataset_eval, eval_steps, verbose_eval, writer, recompute_metrics, keep_last_k=keep_last_k, tag="epoch")
 
@@ -544,6 +548,8 @@ class Model(modules.Module):
 
         # Evaluate Model
         if evaluate:
+            if self.score_logger is not None:
+                self.score_logger.flush()
             self._evaluate(dataset_eval, writer, eval_steps, verbose_eval, recompute_metrics, tag="Evaluation-" + tag)
             self.train()
 
@@ -691,6 +697,9 @@ class Model(modules.Module):
 
             writer = None
 
+        from nnet.utils.score_logger import ScoreLogger
+        self.score_logger = ScoreLogger(writer, wandb_run) if writer is not None or wandb_run is not None else None
+
         # Try Catch
         try:
 
@@ -751,6 +760,7 @@ class Model(modules.Module):
                     # Logs Step
                     if writer is not None and self.model_step % step_log_period == 0:
                         self.log_step(losses=batch_losses, metrics=batch_metrics, infos=self.infos, writer=writer, step=self.model_step, tag="Training-step")
+                        self.score_logger.flush()
 
                     # On Batch End
                     self.on_step_end(
@@ -786,6 +796,8 @@ class Model(modules.Module):
                 # Logs Epoch
                 if writer is not None:
                     self.log_step(losses=epoch_losses, metrics=epoch_metrics, infos={}, writer=writer, step=epoch + 1, tag="Training-epoch")
+                if self.score_logger is not None:
+                    self.score_logger.flush()
 
                 # On Epoch End
                 self.on_epoch_end(
@@ -816,6 +828,9 @@ class Model(modules.Module):
             raise e
 
         finally:
+            if self.score_logger is not None:
+                self.score_logger.flush()
+                self.score_logger = None
             if writer is not None:
                 writer.close()
             if wandb_run is not None:
@@ -842,6 +857,7 @@ class Model(modules.Module):
                 # Log
                 if writer is not None:
                     self.log_step(losses=val_losses, metrics=val_metrics, infos={}, writer=writer, step=self.model_step, tag=os.path.join(tag, str(dataset_i)))
+                self.on_evaluation_end(dataset, val_metrics, eval_steps)
 
     def evaluate(self, dataset_eval, eval_steps=None, verbose=0, recompute_metrics=False, verbose_progress_bar=1):
 

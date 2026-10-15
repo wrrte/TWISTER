@@ -330,7 +330,9 @@ class TWISTER(models.Model):
         
         # Training Infos
         self.register_buffer("episodes", torch.tensor(0))
-        self.register_buffer("ep_rewards", torch.zeros(self.config.num_envs), persistent=False)
+        # Simulators produce CPU rewards. Logging-only returns stay on the CPU,
+        # including after model.to(cuda), avoiding transfers on every env step.
+        self.ep_rewards = torch.zeros(self.config.num_envs)
         self.register_buffer("action_step", torch.tensor(0))
 
         # World Model
@@ -520,6 +522,10 @@ class TWISTER(models.Model):
             self.add_info(key, value)
 
     def on_train_begin(self):
+        if self.score_logger is not None:
+            # Read restored device counters once, outside the collection loop.
+            self._collection_action_step = int(self.action_step)
+            self._collection_episodes = int(self.episodes)
         if self.retrieval_run is not None:
             self.retrieval_run.on_train_begin()
 
@@ -534,6 +540,16 @@ class TWISTER(models.Model):
     def on_epoch_begin(self, epoch):
         if self.retrieval_run is not None:
             self.retrieval_run.set_epoch_length()
+
+    def on_evaluation_end(self, dataset, metrics, eval_steps):
+        if self.score_logger is None or self.score_logger.wandb_run is None:
+            return
+        episodes = len(getattr(dataset, "dataset", dataset))
+        if eval_steps is not None:
+            episodes = min(episodes, eval_steps)
+        self.score_logger.log_evaluation(metrics, int(self.model_step), int(self.action_step),
+                                         self.env.action_repeat, episodes,
+                                         min(self.config.num_eval_envs, episodes))
 
     def on_train_end(self, callback_path, epochs, writer, wandb_run, verbose_progress_bar, keep_last_k):
         # Shared warmup is an intermediate boundary, not a completed agent.
@@ -704,8 +720,11 @@ class TWISTER(models.Model):
         ###############################################################################
 
         # Update training_infos
-        self.action_step += self.env.action_repeat * (self.config.num_envs if active is None else sum(active))
-        self.ep_rewards += obs.reward.to(self.ep_rewards.device)
+        action_steps = self.env.action_repeat * (self.config.num_envs if active is None else sum(active))
+        self.action_step += action_steps
+        self.ep_rewards += obs.reward
+        if self.score_logger is not None:
+            self._collection_action_step += action_steps
 
         # Update History State
         self.episode_history.state = obs.state
@@ -761,8 +780,16 @@ class TWISTER(models.Model):
                 finished_episode = copy.deepcopy(finished_episode)
 
                 # Add Infos
-                self.add_info("episode_steps", self.episode_history.ep_step[env_i].item())
-                self.add_info("episode_reward_total", self.ep_rewards[env_i].item())
+                episode_frames = int(self.episode_history.ep_step[env_i])
+                episode_reward = self.ep_rewards[env_i].item()
+                self.add_info("episode_steps", episode_frames)
+                self.add_info("episode_reward_total", episode_reward)
+                if self.score_logger is not None:
+                    self._collection_episodes += 1
+                    self.score_logger.add_episode("-".join(self.config.env_name), episode_reward,
+                                                   episode_frames, self.env.action_repeat, env_i,
+                                                   self._collection_episodes, int(self.model_step),
+                                                   self._collection_action_step)
 
                 # Reset Episode Step
                 self.episode_history.ep_step[env_i] = 0

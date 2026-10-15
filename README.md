@@ -158,6 +158,36 @@ Other model hyperparameters can also be overridden:
 env_name=atari100k-alien run_name=atari100k override_config='{"num_envs": 4, "epochs": 100, "eval_episode_saving_path": "./videos"}' python3 main.py
 ```
 
+### Weights & Biases logging
+
+Training enables W&B by default, including commands run by the GPU queue workers.
+Before the configuration creates a model or environments, TWISTER calls
+`wandb.login(verify=True, force=True)`. Saved credentials (including `~/.netrc`) or
+`WANDB_API_KEY` are reused and verified; a terminal prompt appears if credentials
+are missing. To enter credentials again at startup, pass `--wandb_relogin`.
+For unattended workers, configure credentials before launching jobs or supply
+`WANDB_API_KEY` through the environment.
+
+The default project is `nnet`, preserving the previous destination. Override it
+with `--wandb_project` or `WANDB_PROJECT`. Select an account/team with
+`--wandb_entity` or `WANDB_ENTITY`; otherwise W&B uses its configured default.
+CLI options take priority over W&B settings. At run initialization, TWISTER prints
+the resolved entity, project, run name, project URL, and run URL. Run names retain
+the callback path: `callbacks/<run_name>/<env_name>` (including warmup/branch
+suffixes when applicable).
+
+```bash
+env_name=atari100k-gopher run_name=gopher_seed3110 python3 -u main.py --seed 3110 --wandb_project twister --wandb_entity YOUR_TEAM
+```
+
+TensorBoard training metrics are synchronized to W&B. Episode returns and periodic
+evaluation scores are also recorded directly under `sample/*` and `eval/*`.
+W&B initialization errors stop training instead of continuing without logging.
+Use `--no-wandb` to train with only local TensorBoard logs. Explicit W&B
+`offline`/`disabled` modes skip login and clearly report that no upload occurs.
+Evaluation and `pass` modes do not log in. Retrieval ON/OFF subprocesses preserve
+`--no-wandb` and reuse the parent's credentials without forcing another prompt.
+
 ### Final checkpoint evaluation
 
 After successful training, TWISTER always saves the final checkpoint, including
@@ -168,11 +198,11 @@ the saved weights already in memory, fresh seeded environments, and the existing
 evaluation backend; no replay buffer is reloaded. Periodic evaluation settings
 (`eval_episodes` and `num_eval_envs`) are independent of these final settings.
 
-Pass `--wandb` when training to record `Evaluation-final/score` (mean episode
+W&B logging (enabled by default) records `Evaluation-final/score` (mean episode
 return), `Evaluation-final/steps`, episode count, environment count, and model/action
 steps in the same training run's history and summary. The summary also records
 the checkpoint path. TensorBoard receives the final score and episode length under
-`Evaluation-final/0` even without `--wandb`. Logging finishes after final evaluation. With retrieval `Both`,
+`Evaluation-final/0` even with `--no-wandb`. Logging finishes after final evaluation. With retrieval `Both`,
 each completed ON/OFF branch receives its own final evaluation; shared warmup does
 not.
 
@@ -287,7 +317,10 @@ Restart an existing evaluation process to use source changes.
 -i / --checkpoint            type=str   default=None                    help="Load model from checkpoint name"
 --cpu                        action="store_true"                        help="Load model on cpu"
 --load_last                  action="store_true"                        help="Load last model checkpoint"
---wandb                      action="store_true",                       help="Initialize wandb logging"
+--wandb / --no-wandb          default=True                               help="Enable/disable W&B training logs and startup login"
+--wandb_project              type=str   default=None                    help="W&B project (settings/WANDB_PROJECT, then nnet)"
+--wandb_entity               type=str   default=None                    help="W&B account/team (settings/WANDB_ENTITY, then account default)"
+--wandb_relogin              action="store_true"                        help="Request credentials again at training startup"
 --verbose_progress_bar       type=int,  default=1,                      help="Verbose level of progress bar display"
 
 # Training

@@ -63,7 +63,12 @@ def branch_commands(directory):
     plan = json.loads((directory / "run.json").read_text())
     command = [sys.executable, str(Path(__file__).resolve().with_name("main.py"))]
     for key, value in plan["cli"].items():
-        if value is True:
+        if key == "wandb_relogin":
+            # The parent already authenticated; children reuse its saved credentials.
+            continue
+        if key == "wandb" and value is False:
+            command.append("--no-wandb")
+        elif value is True:
             command.append("--" + key)
         elif value is not None and value is not False:
             command.extend(("--" + key, str(value)))

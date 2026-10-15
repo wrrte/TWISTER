@@ -28,6 +28,7 @@ import argparse
 import importlib
 import warnings
 from retrieval_runs import prepare_retrieval_run, fit_retrieval_run
+from wandb_logging import login_wandb
 
 # Disable Warnings
 warnings.filterwarnings("ignore")
@@ -43,6 +44,13 @@ def main(args):
 
     # Load Config
     retrieval_plan = prepare_retrieval_run(args)
+    if args.mode == "training":
+        login_wandb(
+            enabled=args.wandb,
+            project=args.wandb_project,
+            entity=args.wandb_entity,
+            relogin=args.wandb_relogin,
+        )
     args.config = importlib.import_module(args.config_file.replace(".py", "").replace("/", "."))
 
     # Load Model
@@ -79,6 +87,8 @@ def main(args):
             detect_anomaly=getattr(args.config, "detect_anomaly", args.detect_anomaly),
             recompute_metrics=getattr(args.config, "recompute_metrics", False),
             wandb_logging=args.wandb,
+            wandb_project=args.wandb_project,
+            wandb_entity=args.wandb_entity,
             verbose_progress_bar=args.verbose_progress_bar,
             keep_last_k=args.keep_last_k
         ))
@@ -109,7 +119,14 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=None, help="Run seed (0 through 4294967295); overrides defaults.json and override_config")
     parser.add_argument("--shared_warmup", type=str, default=None, help="TWISTER shared_warmup directory")
     parser.add_argument("--retrieval_branch", choices=("on", "off"), default=None, help="Run one branch from --shared_warmup")
-    parser.add_argument("--wandb",                      action="store_true",                                                            help="Initialize wandb logging")
+    parser.add_argument("--wandb", action=argparse.BooleanOptionalAction, default=True,
+                        help="Log training to W&B and verify login at startup (default: enabled; --no-wandb disables)")
+    parser.add_argument("--wandb_project", "--wandb-project", default=None,
+                        help="W&B project (default: W&B settings / WANDB_PROJECT, then nnet)")
+    parser.add_argument("--wandb_entity", "--wandb-entity", default=None,
+                        help="W&B account or team (default: W&B settings / WANDB_ENTITY, then account default)")
+    parser.add_argument("--wandb_relogin", "--wandb-relogin", action="store_true",
+                        help="Request W&B credentials again at training startup")
     parser.add_argument("--verbose_progress_bar",       type=int,   default=1,                                                          help="Verbose level of progress bar display")
 
     # Training

@@ -22,7 +22,7 @@ from tqdm import tqdm
 import os
 import time
 import glob
-import wandb
+from wandb_logging import init_wandb_run
 
 # Neural Nets
 from nnet import modules
@@ -652,16 +652,15 @@ class Model(modules.Module):
         recompute_metrics=False,
         wandb_logging=False,
         verbose_progress_bar=1,
-        keep_last_k=None
+        keep_last_k=None,
+        wandb_project=None,
+        wandb_entity=None,
     ):
         
         # Init wandb
         wandb_run = None
-        if callback_path is not None and wandb_logging:
-            try:
-                wandb_run = wandb.init(project='nnet', sync_tensorboard=True, name=callback_path)
-            except Exception as e:
-                print(str(e))
+        if wandb_logging:
+            wandb_run = init_wandb_run(callback_path, project=wandb_project, entity=wandb_entity)
 
         # Is Compiled
         if not self.compiled:

@@ -45,6 +45,9 @@ def prepare_retrieval_run(args):
 
     override = load_run_config(seed=getattr(args, "seed", None))
     set_run_config(override)
+    if not os.environ.get("run_name") and override.get("seed") is not None:
+        game_name = os.environ["env_name"].split("-", 1)[-1]
+        os.environ["run_name"] = f"{game_name}_seed{override['seed']}"
     if override.get("retrieval_enabled") != "Both":
         return None
     if args.mode != "training":

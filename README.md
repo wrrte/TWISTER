@@ -58,6 +58,19 @@ default, or use `override_config='{"seed":42}'`. The priority is `--seed`, then
 `override_config`, then the defaults file. The shipped `"seed": null` keeps the
 existing behavior when no seed is specified.
 
+When `run_name` is omitted or empty and a seed is set, it defaults to
+`<game_name>_seed<seed>`, using the environment name without its benchmark prefix
+and the resolved seed from the priority above. For example:
+
+```bash
+env_name=atari100k-jamesbond override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9997
+```
+
+This uses `run_name=jamesbond_seed9997` and saves to
+`callbacks/jamesbond_seed9997/atari100k-jamesbond`. An explicit `run_name` takes
+precedence. Without a seed, the existing naming behavior is preserved. With
+`Both`, the generated name receives the usual `_warmup`, `_O`, and `_X` suffixes.
+
 `Both` records the resolved seed and restores the shared checkpoint RNG in each
 branch. When manually resuming a branch, omit `--seed` or use its saved value.
 The saved checkpoint RNG takes precedence over restarting the seed sequence.

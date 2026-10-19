@@ -1,8 +1,6 @@
-env_name=atari100k-jamesbond run_name=jamesbond_seed9999 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9999
-env_name=atari100k-jamesbond run_name=jamesbond_seed9998 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9998
-env_name=atari100k-krull run_name=krull_seed9999 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9999
-env_name=atari100k-krull run_name=krull_seed9998 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9998
-env_name=atari100k-pong run_name=pong_seed9999 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9999
-env_name=atari100k-pong run_name=pong_seed9998 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9998
-env_name=atari100k-roadrunner run_name=roadrunner_seed9999 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9999
-env_name=atari100k-roadrunner run_name=roadrunner_seed9998 override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9998
+env_name=atari100k-pong override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9998
+env_name=atari100k-roadrunner override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9999
+env_name=atari100k-roadrunner override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9998
+
+env_name=atari100k-krull override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9997
+env_name=atari100k-jamesbond override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9997

@@ -246,6 +246,16 @@ file or `override_config`. They must be positive integers. Interrupted or failed
 training does not trigger final evaluation; `--mode evaluation` keeps its existing
 behavior.
 
+### Export final evaluation results
+
+Use `python results/classify_wandb_runs.py --xlsx` to download
+`Evaluation-final/score` from W&B and create a CSV plus an Excel game/config/seed
+table. Install the export dependencies with
+`python -m pip install -r results/requirements.txt`. The default destination is
+`choemj-kaist/nnet`; saved W&B credentials are reused. See
+[results/README.md](results/README.md) for filters, output paths, missing-score
+handling, and aggregation rules.
+
 ### Training performance
 
 Training groups equal-size image crops for resizing by default. Each image still

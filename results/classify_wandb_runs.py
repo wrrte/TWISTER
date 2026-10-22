@@ -1,0 +1,266 @@
+#!/usr/bin/env python3
+"""Export TWISTER's final evaluation scores using the read-only W&B Public API."""
+
+import argparse
+from collections import Counter
+import csv
+import json
+import math
+import os
+from pathlib import Path
+import re
+import sys
+import tempfile
+
+HERE = Path(__file__).resolve().parent
+SCORE_KEY = "Evaluation-final/score"
+FINAL_KEYS = [SCORE_KEY] + ["Evaluation-final/" + key for key in (
+    "steps", "episodes", "num_envs", "model_step", "action_step", "checkpoint")]
+RETRIEVAL_FIELDS = {
+    "warmup_steps": "Warmup Steps",
+    "target": "Retrieval Target",
+    "z_score_threshold": "Z Score Threshold",
+    "batch_size_reduction": "Batch Size Reduction",
+    "hash_bits": "Hash Bits",
+    "anchor_weight": "Anchor Weight",
+}
+FIELDS = [
+    "Run Name", "Run ID", "State", "Game", "Environment", "Seed",
+    "Retrieval Enable", "Config", *RETRIEVAL_FIELDS.values(),
+    "Eval Return", *FINAL_KEYS, "Score Source", "Score Status", "Error",
+    "Commit", "Created At", "Run URL",
+]
+
+
+def number(value):
+    """Accept finite scores, including zero and negative episode returns."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def config_value(config, key):
+    if key in config:
+        return config[key]
+    value = config
+    for part in key.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return None
+        value = value[part]
+    return value
+
+
+def metric_value(summary, key):
+    value = summary.get(key)
+    if value is None:
+        group, name = key.split("/", 1)
+        nested = summary.get(group)
+        if isinstance(nested, dict):
+            value = nested.get(name)
+    # Some runs configure a 'last' summary reducer. Never substitute max/mean.
+    return value.get("last") if isinstance(value, dict) else value
+
+
+def parse_identity(name, config):
+    env = config_value(config, "env_name") or ""
+    if not env:
+        match = re.search(r"(?:^|/)((?:atari100k|dmc)-[^/]+)(?:/|$)", name)
+        env = match.group(1) if match else ""
+    seed = config_value(config, "seed")
+    if seed is None:
+        match = re.search(r"(?:^|[_/])seed[_-]?(\d+)(?=[_/]|$)", name, re.I)
+        seed = int(match.group(1)) if match else None
+    retrieval = config_value(config, "retrieval_enabled")
+    run_label = name.rstrip("/").split("/")[-2] if "/" in name else name
+    if run_label.endswith("_warmup"):
+        retrieval = "Both"
+    elif run_label.endswith("_O"):
+        retrieval = True
+    elif run_label.endswith("_X"):
+        retrieval = False
+    if retrieval is True or str(retrieval).lower() == "true":
+        retrieval = "True"
+    elif retrieval is False or str(retrieval).lower() == "false":
+        retrieval = "False"
+    elif str(retrieval).lower() == "both":
+        retrieval = "Both"
+    else:
+        retrieval = "Unknown"
+    return str(env), seed, retrieval
+
+
+def seed_from_metadata(run):
+    metadata = run.metadata or {}
+    args = metadata.get("args", [])
+    for index, argument in enumerate(args):
+        if argument == "--seed" and index + 1 < len(args):
+            value = str(args[index + 1])
+        elif str(argument).startswith("--seed="):
+            value = str(argument).split("=", 1)[1]
+        else:
+            continue
+        if value.isdigit():
+            return int(value)
+    return None
+
+
+def load_run_overrides(path=None):
+    """Load explicit corrections for historical runs with missing W&B config."""
+    source = Path(path) if path is not None else HERE / "run_overrides.json"
+    if not source.exists() and path is None:
+        return {}
+    overrides = json.loads(source.read_text(encoding="utf-8"))
+    if not isinstance(overrides, dict) or any(
+            not isinstance(values, dict) or set(values) != {"retrieval_enabled"}
+            or type(values["retrieval_enabled"]) is not bool
+            for values in overrides.values()):
+        raise ValueError("Run overrides must map run IDs to {retrieval_enabled: true/false}")
+    return overrides
+
+
+def classify_run(run, history_fallback=True, config_overrides=None):
+    config = {**(run.config or {}), **(config_overrides or {})}
+    summary = run.summary
+    name = str(run.name or "")
+    environment, seed, retrieval = parse_identity(name, config)
+    if seed is None:
+        try:
+            seed = seed_from_metadata(run)
+        except Exception as error:
+            print(f"Warning: {run.id}: seed metadata unavailable ({type(error).__name__}).",
+                  file=sys.stderr)
+    retrieval_config = {
+        key: config_value(config, "retrieval." + key)
+        for key in RETRIEVAL_FIELDS
+    }
+    # Keep other recorded retrieval settings in the grouping label as well.
+    recorded = config.get("retrieval")
+    details = dict(recorded) if isinstance(recorded, dict) else {}
+    for key, value in config.items():
+        if key.startswith("retrieval."):
+            details[key[len("retrieval."):]] = value
+    label = {"False": "Retrieval OFF", "True": "Retrieval ON",
+             "Both": "Shared warmup", "Unknown": "Retrieval Unknown"}[retrieval]
+    if retrieval != "False" and details:
+        label += " " + json.dumps(details, sort_keys=True, ensure_ascii=False)
+    row = {
+        "Run Name": name, "Run ID": run.id, "State": run.state,
+        "Game": environment.split("-", 1)[-1], "Environment": environment,
+        "Seed": seed if seed is not None else "N/A",
+        "Retrieval Enable": retrieval, "Config": label,
+        **{column: retrieval_config[key] for key, column in RETRIEVAL_FIELDS.items()},
+        **{key: metric_value(summary, key) for key in FINAL_KEYS},
+        "Score Source": "", "Score Status": "missing", "Error": "",
+        "Commit": getattr(run, "commit", None), "Created At": run.created_at,
+        "Run URL": run.url,
+    }
+    score = number(row[SCORE_KEY])
+    if score is not None:
+        row["Score Source"] = "summary"
+    elif retrieval == "Both":
+        row["Score Status"] = "warmup"
+    elif history_fallback:
+        try:
+            # scan_history does not sample; requesting only this key also handles
+            # sparse logs where other final metrics were written separately.
+            for entry in run.scan_history(keys=[SCORE_KEY], page_size=1000):
+                candidate = number(entry.get(SCORE_KEY))
+                if candidate is not None:
+                    score = candidate
+            if score is not None:
+                row["Score Source"] = "history"
+        except Exception as error:
+            # A partially downloaded history cannot establish the final value.
+            score = None
+            row["Score Status"] = "error"
+            row["Error"] = f"{type(error).__name__}: {error}"
+    row[SCORE_KEY] = row["Eval Return"] = score if score is not None else "N/A"
+    if score is not None:
+        row["Score Status"] = "ok"
+    return {key: "N/A" if value is None else value for key, value in row.items()}
+
+
+def write_csv(rows, output):
+    output = Path(output).expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8-sig", newline="",
+                                         dir=output.parent, delete=False) as stream:
+            temporary = Path(stream.name)
+            writer = csv.DictWriter(stream, fieldnames=FIELDS)
+            writer.writeheader()
+            writer.writerows(rows)
+        temporary.replace(output)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return output
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--entity", default=os.environ.get("WANDB_ENTITY") or "choemj-kaist")
+    parser.add_argument("--project", default=os.environ.get("WANDB_PROJECT") or "nnet")
+    parser.add_argument("--base-url", default=os.environ.get("WANDB_BASE_URL"),
+                        help="W&B API endpoint; normally leave unset (not the Forge UI URL)")
+    parser.add_argument("--output", type=Path, default=HERE / "wandb_runs_classification.csv")
+    parser.add_argument("--xlsx", nargs="?", type=Path, const=HERE / "converted_results.xlsx",
+                        help="Also create Excel; optionally supply its path")
+    parser.add_argument("--run-id", action="append", help="Export only these run IDs (repeatable)")
+    parser.add_argument("--states", nargs="+", help="For example: --states finished running")
+    parser.add_argument("--name-regex", default=r"^callbacks/.*(?:atari100k|dmc)-",
+                        help="W&B displayName regex; use '' to include every project run")
+    parser.add_argument("--no-history-fallback", action="store_true")
+    parser.add_argument("--run-overrides", type=Path,
+                        help="Run-ID corrections; defaults to results/run_overrides.json when present")
+    parser.add_argument("--timeout", type=int, default=30)
+    args = parser.parse_args(argv)
+    try:
+        import wandb
+        if not hasattr(wandb, "Api"):
+            raise ImportError("The installed wandb SDK could not be imported")
+    except ImportError as error:
+        parser.exit(1, f"{error}. Install: python -m pip install -r {HERE / 'requirements.txt'}\n")
+    try:
+        overrides_by_id = load_run_overrides(args.run_overrides)
+        # Api reuses WANDB_API_KEY / saved login. No wandb.init or cloud writes.
+        overrides = {"base_url": args.base_url} if args.base_url else {}
+        api = wandb.Api(overrides=overrides, timeout=args.timeout)
+        project = f"{args.entity}/{args.project}"
+        filters = {}
+        if args.name_regex:
+            filters["displayName"] = {"$regex": args.name_regex}
+        if args.states:
+            filters["state"] = {"$in": args.states}
+        if args.run_id:
+            filters["name"] = {"$in": args.run_id}
+        print(f"Reading {project} ({SCORE_KEY})", flush=True)
+        rows = []
+        for run in api.runs(project, filters=filters, order="+created_at", per_page=100):
+            row = classify_run(run, history_fallback=not args.no_history_fallback,
+                               config_overrides=overrides_by_id.get(run.id))
+            rows.append(row)
+            print(f"[{len(rows)}] {row['Run Name']}: {row[SCORE_KEY]} "
+                  f"({row['Score Status']}, {row['State']})", flush=True)
+        if not rows:
+            raise ValueError("No matching runs. Check entity/project, --run-id and --name-regex.")
+        output = write_csv(rows, args.output)
+        print(f"CSV: {output}\nScores: {dict(Counter(row['Score Status'] for row in rows))}")
+        if args.xlsx is not None:
+            from convert_csv_to_excel import convert_csv_to_excel
+            convert_csv_to_excel(output, args.xlsx)
+        return 1 if any(row["Score Status"] == "error" for row in rows) else 0
+    except Exception as error:
+        print(f"Export failed ({type(error).__name__}): {error}", file=sys.stderr)
+        print("Check W&B credentials (wandb login), project access and WANDB_BASE_URL.",
+              file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

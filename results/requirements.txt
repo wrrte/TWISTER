@@ -1,0 +1,2 @@
+wandb>=0.16
+openpyxl>=3.1

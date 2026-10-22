@@ -8,3 +8,4 @@ callbacks/*
 wandb/*
 env_twister/*
 job_queue_*.lock
+tests/

@@ -53,6 +53,17 @@ class ExtractionTests(unittest.TestCase):
                                          config_overrides=overrides.get("future-run"))
         self.assertEqual(unconfirmed["Retrieval Enable"], "Unknown")
 
+    def test_only_confirmed_roadrunner_runs_are_recorded_as_baseline(self):
+        overrides = export.load_run_overrides()
+        for run_id in ("xetdccow", "6pn495jh"):
+            row = export.classify_run(make_run(
+                id=run_id, name="callbacks/road_runner_seed9999/atari100k-road_runner",
+            ), config_overrides=overrides.get(run_id))
+            self.assertEqual(row["Retrieval Enable"], "False")
+            self.assertEqual(row["Config"], "Retrieval OFF")
+        self.assertNotIn("pwa555yc", overrides)  # Different run, missing final score.
+        self.assertNotIn("f4uu5knq", overrides)  # Amidar remains Unknown.
+
     def test_zero_negative_and_last_summary(self):
         for value in (0, -20.7, {"last": 0}):
             row = export.classify_run(make_run(summary={export.SCORE_KEY: value}))
@@ -137,6 +148,62 @@ class ExtractionTests(unittest.TestCase):
 
 
 class WorkbookTests(unittest.TestCase):
+    def test_custom_overrides_keep_distinct_on_configurations(self):
+        from openpyxl import load_workbook
+        rows = [export.classify_run(make_run(
+            id=f"custom{target}", config={"seed": 1, "retrieval_enabled": True,
+                                          "retrieval": {"target": target}},
+        )) for target in (16, 32)]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = export.write_csv(rows, root / "scores.csv")
+            corrections = root / "overrides.json"
+            corrections.write_text(
+                '{"custom16": {"retrieval_enabled": true}, '
+                '"custom32": {"retrieval_enabled": true}}', encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                target = convert_csv_to_excel(source, root / "scores.xlsx", corrections)
+            book = load_workbook(target)
+            try:
+                labels = {row[1] for row in book["Results"].values}
+                self.assertIn('Retrieval ON {"target": 16}', labels)
+                self.assertIn('Retrieval ON {"target": 32}', labels)
+            finally:
+                book.close()
+
+    def test_old_csv_roadrunner_unknowns_are_corrected_before_aggregation(self):
+        from openpyxl import load_workbook
+        rows = [export.classify_run(make_run(
+            id=run_id, name=f"callbacks/road_runner_seed{seed}/atari100k-road_runner",
+            summary={export.SCORE_KEY: score},
+        )) for run_id, seed, score in (
+            ("xetdccow", 9999, 17628), ("6pn495jh", 9998, 23434),
+            ("pwa555yc", 9999, None),
+        )]
+        self.assertTrue(all(row["Config"] == "Retrieval Unknown" for row in rows))
+        with tempfile.TemporaryDirectory() as directory:
+            source = export.write_csv(rows, Path(directory) / "old.csv")
+            before = source.read_bytes()
+            with contextlib.redirect_stdout(io.StringIO()):
+                target = convert_csv_to_excel(source, Path(directory) / "corrected.xlsx")
+            self.assertEqual(source.read_bytes(), before)
+            book = load_workbook(target)
+            try:
+                raw = list(book["Runs"].values)
+                records = [dict(zip(raw[0], values)) for values in raw[1:]]
+                for row in records[:2]:
+                    self.assertEqual(row["Retrieval Enable"], "False")
+                    self.assertEqual(row["Config"], "Retrieval OFF")
+                self.assertEqual(records[2]["Config"], "Retrieval Unknown")
+                results = list(book["Results"].values)
+                headers = list(results[0])
+                baseline = next(row for row in results if row[1] == "Retrieval OFF")
+                self.assertEqual(baseline[headers.index(9998)], 23434)
+                self.assertEqual(baseline[headers.index(9999)], 17628)
+                self.assertEqual(baseline[headers.index(PAIRED_MEAN_COLUMN)], 20531)
+            finally:
+                book.close()
+
     def test_duplicate_runs_are_averaged_per_seed_and_nonfinal_runs_are_excluded(self):
         from openpyxl import load_workbook
         rows = []

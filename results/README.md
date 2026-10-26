@@ -57,6 +57,18 @@ CSV에는 게임, 환경, 시드, retrieval 설정, 최종 점수와 평가 정�
 적용합니다. 다른 run은 이 확인 내용을 자동으로 이어받지 않습니다.
 다른 보정 파일은 `--run-overrides PATH`로 지정할 수 있습니다.
 
+2026-10-26에 사용자가 추가 확인한 Road Runner 완료 run도
+`run_overrides.json`에 `retrieval_enabled: false`로 기록했습니다.
+
+- `xetdccow`: seed 9999, 최종 점수 17628
+- `6pn495jh`: seed 9998, 최종 점수 23434
+
+`convert_csv_to_excel.py`도 이 보정 파일을 읽으므로, 과거 CSV에 두 run이
+`Retrieval Unknown`으로 저장되어 있어도 Excel의 `Results`와 `Runs`에서는
+`Retrieval OFF`로 반영하고 OFF 평균·비교 지표를 계산합니다. 원본 CSV는
+수정하지 않습니다. 다른 보정 파일은 변환 시에도 `--run-overrides PATH`로
+지정할 수 있습니다.
+
 Excel 시트:
 
 - `Results`: 게임·retrieval 설정별 시드 점수와 비교 지표 3개를 표시합니다.
@@ -88,6 +100,40 @@ Excel 시트:
 
 retrieval config가 없는 과거 run의 정확한 세부 설정 비교에는 당시 설정 정보가
 추가로 필요하지만, 최종 점수 자체의 추출에는 필요하지 않습니다.
+
+## 누락된 Atari100k 학습을 TITAN 큐에 추가
+
+```bash
+# 미리보기: 파일을 변경하지 않음
+python results/append_missing_atari_jobs.py --dry-run
+
+# job_queue_titan.lock을 잡고 기존 큐 끝에 추가
+python results/append_missing_atari_jobs.py
+```
+
+`converted_results.xlsx`의 `Runs` 시트를 기준으로 Atari100k 전체 26개 게임의
+시드 `9997, 9998, 9999`를 채웁니다. 엑셀에 없는 게임도 포함합니다.
+유효한 최종 점수가 있는 `finished` run은 완료로, `running` run과 기존 큐의
+학습 명령어는 확보 예정으로 계산해 중복 추가하지 않습니다. 사용자의 확인에
+따라 `Retrieval Unknown` 기록도 인정하며, ON·공유 warmup은 제외합니다.
+최종 점수가 없는 완료 run과 실패 run은 해당 시드를 다시 추가합니다.
+
+이미 확보했거나 확보 예정인 시드 수를 반영해 모든 게임에 1개 → 2개 → 3개
+시드를 확보하는 순서로 새 작업을 배치합니다. 각 게임에서는 아직 없는 시드 중
+`9997, 9998, 9999` 순서로 선택합니다. 기존 큐의 순서는 유지하며, 여러 worker가
+실행될 때 단계별 완료를 기다리는 동기화 기능은 없습니다.
+
+환경명은 실제 Atari ROM 이름(`bank_heist`, `road_runner` 등)을 사용하고,
+명령어의 나머지 부분은 항상 다음과 같습니다.
+
+```bash
+env_name=atari100k-road_runner override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9997
+```
+
+입력·출력 경로는 `--xlsx PATH`, `--queue PATH`로 바꿀 수 있습니다. 기본 경로는
+실행 위치와 무관하게 이 저장소의 결과 엑셀과 TITAN 큐입니다. 실행 중인 작업이
+엑셀에 반영되지 않은 경우에는 중복을 판단할 수 없으므로 최신 결과 엑셀을
+사용하세요. 기본 `python`에 openpyxl이 없다면 `twister` 환경의 Python을 사용하세요.
 
 네트워크 접속 없는 검증:
 

@@ -10,7 +10,7 @@ from statistics import mean
 import sys
 import tempfile
 
-from classify_wandb_runs import HERE, SCORE_KEY, number
+from classify_wandb_runs import HERE, SCORE_KEY, load_run_overrides, number
 
 
 # (Random, Human, TWISTER paper): transcribed from the user's table, 2026-10-22.
@@ -87,7 +87,7 @@ def comparison_metrics(records, reference):
     return metrics, paper_metrics, note
 
 
-def convert_csv_to_excel(csv_path=None, output_path=None):
+def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=None):
     try:
         from openpyxl import Workbook
         from openpyxl.comments import Comment
@@ -104,6 +104,22 @@ def convert_csv_to_excel(csv_path=None, output_path=None):
         if required - set(fields):
             raise ValueError(f"Missing CSV columns: {', '.join(sorted(required - set(fields)))}")
         rows = list(reader)
+    # Reapply confirmed run-ID corrections even when converting an older CSV.
+    overrides = load_run_overrides(run_overrides_path)
+    for row in rows:
+        correction = overrides.get(row.get("Run ID"))
+        if correction is not None:
+            enabled = correction["retrieval_enabled"]
+            row["Retrieval Enable"] = str(enabled)
+            label = "Retrieval ON" if enabled else "Retrieval OFF"
+            if enabled:
+                for prefix in ("Retrieval ON", "Retrieval Unknown"):
+                    if row["Config"].startswith(prefix):
+                        label += row["Config"][len(prefix):]
+                        break
+            row["Config"] = label
+            if "Retrieval Enable" not in fields:
+                fields.append("Retrieval Enable")
     if output == csv_path.resolve():
         raise ValueError("Excel output must differ from the input CSV path")
 
@@ -259,9 +275,11 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=HERE / "wandb_runs_classification.csv")
     parser.add_argument("--output", type=Path, default=HERE / "converted_results.xlsx")
+    parser.add_argument("--run-overrides", type=Path,
+                        help="Run-ID corrections; defaults to results/run_overrides.json when present")
     args = parser.parse_args(argv)
     try:
-        convert_csv_to_excel(args.input, args.output)
+        convert_csv_to_excel(args.input, args.output, args.run_overrides)
         return 0
     except (OSError, ValueError, RuntimeError) as error:
         print(f"Excel conversion failed: {error}", file=sys.stderr)

@@ -253,7 +253,7 @@ def main(argv=None):
         print(f"CSV: {output}\nScores: {dict(Counter(row['Score Status'] for row in rows))}")
         if args.xlsx is not None:
             from convert_csv_to_excel import convert_csv_to_excel
-            convert_csv_to_excel(output, args.xlsx)
+            convert_csv_to_excel(output, args.xlsx, args.run_overrides)
         return 1 if any(row["Score Status"] == "error" for row in rows) else 0
     except Exception as error:
         print(f"Export failed ({type(error).__name__}): {error}", file=sys.stderr)

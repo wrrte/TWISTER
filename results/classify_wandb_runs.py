@@ -209,7 +209,7 @@ def main(argv=None):
     parser.add_argument("--base-url", default=os.environ.get("WANDB_BASE_URL"),
                         help="W&B API endpoint; normally leave unset (not the Forge UI URL)")
     parser.add_argument("--output", type=Path, default=HERE / "wandb_runs_classification.csv")
-    parser.add_argument("--xlsx", nargs="?", type=Path, const=HERE / "converted_results.xlsx",
+    parser.add_argument("--xlsx", nargs="?", type=Path, const=HERE / "performance_twister.xlsx",
                         help="Also create Excel; optionally supply its path")
     parser.add_argument("--run-id", action="append", help="Export only these run IDs (repeatable)")
     parser.add_argument("--states", nargs="+", help="For example: --states finished running")

@@ -30,7 +30,7 @@ python results/convert_csv_to_excel.py
 ```
 
 출력 기본 경로는 실행 위치와 무관하게 이 디렉터리의
-`wandb_runs_classification.csv`, `converted_results.xlsx`입니다.
+`wandb_runs_classification.csv`, `performance_twister.xlsx`입니다.
 `--xlsx`를 생략하면 CSV만 만듭니다. 기존 파일은 성공적으로 저장한 후 교체합니다.
 
 점수는 summary의 정확한 `Evaluation-final/score`를 우선 사용합니다.
@@ -111,7 +111,7 @@ python results/append_missing_atari_jobs.py --dry-run
 python results/append_missing_atari_jobs.py
 ```
 
-`converted_results.xlsx`의 `Runs` 시트를 기준으로 Atari100k 전체 26개 게임의
+`performance_twister.xlsx`의 `Runs` 시트를 기준으로 Atari100k 전체 26개 게임의
 시드 `9997, 9998, 9999`를 채웁니다. 엑셀에 없는 게임도 포함합니다.
 유효한 최종 점수가 있는 `finished` run은 완료로, `running` run과 기존 큐의
 학습 명령어는 확보 예정으로 계산해 중복 추가하지 않습니다. 사용자의 확인에

@@ -142,7 +142,7 @@ def append_jobs(xlsx_path, queue_path, dry_run=False):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--xlsx", type=Path, default=HERE / "converted_results.xlsx")
+    parser.add_argument("--xlsx", type=Path, default=HERE / "performance_twister.xlsx")
     parser.add_argument("--queue", type=Path, default=HERE.parent / "job_queue_titan.txt")
     parser.add_argument("--dry-run", action="store_true", help="Print new jobs without changing files")
     args = parser.parse_args(argv)

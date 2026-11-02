@@ -96,7 +96,7 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
     except ImportError as error:
         raise RuntimeError("Excel export requires: python -m pip install openpyxl") from error
     csv_path = Path(csv_path or HERE / "wandb_runs_classification.csv").expanduser()
-    output = Path(output_path or HERE / "converted_results.xlsx").expanduser().resolve()
+    output = Path(output_path or HERE / "performance_twister.xlsx").expanduser().resolve()
     with csv_path.open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
         fields = reader.fieldnames or []
@@ -274,7 +274,7 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=HERE / "wandb_runs_classification.csv")
-    parser.add_argument("--output", type=Path, default=HERE / "converted_results.xlsx")
+    parser.add_argument("--output", type=Path, default=HERE / "performance_twister.xlsx")
     parser.add_argument("--run-overrides", type=Path,
                         help="Run-ID corrections; defaults to results/run_overrides.json when present")
     args = parser.parse_args(argv)

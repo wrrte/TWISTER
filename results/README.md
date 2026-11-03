@@ -69,18 +69,51 @@ CSV에는 게임, 환경, 시드, retrieval 설정, 최종 점수와 평가 정�
 수정하지 않습니다. 다른 보정 파일은 변환 시에도 `--run-overrides PATH`로
 지정할 수 있습니다.
 
+`run_overrides.json`은 run ID 외에 전체 run 이름도 키로 사용할 수 있으며,
+수동 평가한 `score`, `steps`, `episodes`, `num_envs`, `model_step`, `checkpoint`,
+`source`도 지원합니다. 명시한 점수는 CSV/W&B 점수보다 우선하며, Excel 변환 시
+CSV에 없는 run은 완료된 평가 행으로 추가합니다. 원본 CSV는 수정하지 않습니다.
+점수 출처는 `Score Source`와 셀 메모에 남깁니다.
+
+2026-11-03 Kangaroo seed 9998의 재평가 결과는 **924점**, 100 에피소드,
+병렬 환경 32개로 기록했습니다. 같은 파일에 다음 형식으로 결과를 추가한 뒤
+`python results/convert_csv_to_excel.py`를 실행하면 됩니다.
+
+```json
+"callbacks/kangaroo_seed9998/atari100k-kangaroo": {
+  "retrieval_enabled": false,
+  "score": 924,
+  "episodes": 100,
+  "num_envs": 32,
+  "model_step": 100000,
+  "source": "standalone evaluation, user confirmed 2026-11-03"
+}
+```
+
+Gopher seed 3110도 실제 전체 run 이름(예: `callbacks/gopher_seed3110/atari100k-gopher`)을
+키로 추가하면 seed 3110 열이 자동 생성됩니다. run ID를 키로 쓰면서 CSV에 없는 행을
+추가하려면 `env_name`, `seed`, `retrieval_enabled`도 지정해야 합니다. 점수 보정 시
+평가 메타데이터는 함께 지정한 값만 사용하며, 생략한 값은 `N/A`로 둡니다.
+
+2026-11-03 사용자가 현재까지 기록된 모든 run을 Retrieval OFF로 확인했습니다.
+현재 CSV 및 로컬 W&B 디렉터리에 기록된 run ID를 `run_overrides.json`에 보정해
+기존 기록을 OFF로 분류합니다. 이후 생성되는 run은 해당 run의 config를 사용합니다.
+다른 GPU(RTX3090)에서 실행한 Gopher seed 3110의 점수는 **33627.2**, 평균 episode
+steps는 **58265.52**로 기록했습니다. 이 평가의 에피소드 수와 병렬 환경 수는
+확인되지 않았으므로 `N/A`로 둡니다.
+
 Excel 시트:
 
 - `Results`: 게임·retrieval 설정별 시드 점수와 비교 지표 3개를 표시합니다.
   게임명 아래에는 Random/Human 점수를, 각 게임의 첫 행에는
   `TWISTER (논문): 점수`를 표시합니다. 기준값은 사용자가 첨부한 Atari100k 표
   (2026-10-22)의 Random, Human, TWISTER (ours) 열을 그대로 옮겼습니다.
-  이미지에 표시된 정수값을 사용합니다. CSV에 등장한 게임만 표에 표시하며,
+  이미지에 표시된 정수값을 사용합니다. CSV와 보정 파일에 등장한 게임만 표에 표시하며,
   참조표에 없는 환경에는 논문 행을 추가하지 않습니다.
   `Environment` 열은 생략하고 시드 숫자 헤더는 왼쪽 정렬합니다.
   실행 중인 run은 `RUNNING`으로 표시합니다. 셀 메모에서 원본 점수와 run 링크를
   모두 확인할 수 있습니다.
-- `Runs`: CSV 전체 원본. 시드 미확인 run도 보존합니다.
+- `Runs`: 보정된 CSV 행과 추가한 로컬 평가 행. 시드 미확인 run도 보존합니다.
 - `Missing`: 최종 점수가 없는 run. 실패, 실행 중, warmup 등을 상태로 구분합니다.
 
 오른쪽 비교 지표는 STORM과 같은 행별 비교 방식으로 계산합니다.

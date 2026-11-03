@@ -109,17 +109,70 @@ def seed_from_metadata(run):
 
 
 def load_run_overrides(path=None):
-    """Load explicit corrections for historical runs with missing W&B config."""
+    """Load confirmed config/score corrections keyed by run ID or run name."""
     source = Path(path) if path is not None else HERE / "run_overrides.json"
     if not source.exists() and path is None:
         return {}
     overrides = json.loads(source.read_text(encoding="utf-8"))
-    if not isinstance(overrides, dict) or any(
-            not isinstance(values, dict) or set(values) != {"retrieval_enabled"}
-            or type(values["retrieval_enabled"]) is not bool
-            for values in overrides.values()):
-        raise ValueError("Run overrides must map run IDs to {retrieval_enabled: true/false}")
+    allowed = {"retrieval_enabled", "env_name", "seed", "score", "steps", "episodes",
+               "num_envs", "model_step", "action_step", "checkpoint", "source"}
+    if not isinstance(overrides, dict):
+        raise ValueError("Run overrides must map run IDs or run names to corrections")
+    for identity, values in overrides.items():
+        if not isinstance(values, dict) or not values or set(values) - allowed:
+            raise ValueError(f"Invalid override fields for {identity}")
+        if "retrieval_enabled" in values and type(values["retrieval_enabled"]) is not bool:
+            raise ValueError(f"{identity}: retrieval_enabled must be true/false")
+        for key in ("score", "steps"):
+            if key in values and number(values[key]) is None:
+                raise ValueError(f"{identity}: {key} must be a finite number")
+        for key in ("seed", "episodes", "num_envs", "model_step", "action_step"):
+            if key in values and (type(values[key]) is not int or values[key] < 0
+                                  or (key in ("episodes", "num_envs") and values[key] == 0)):
+                raise ValueError(f"{identity}: invalid {key}")
+        for key in ("env_name", "checkpoint", "source"):
+            if key in values and (not isinstance(values[key], str) or not values[key].strip()):
+                raise ValueError(f"{identity}: {key} must be nonempty text")
     return overrides
+
+
+def apply_run_overrides(rows, overrides, add_missing=True):
+    """Apply confirmed results once, including local runs absent from the CSV."""
+    for identity, values in overrides.items():
+        matches = [row for row in rows if identity in (row.get("Run ID"), row.get("Run Name"))]
+        if not matches and add_missing and "score" in values:
+            environment, seed, _ = parse_identity(identity, values)
+            if not environment or seed is None or "retrieval_enabled" not in values:
+                raise ValueError(f"{identity}: a missing run needs environment, seed and retrieval_enabled")
+            row = {field: "N/A" for field in FIELDS}
+            row.update({"Run ID": identity, "Run Name": identity, "Environment": environment,
+                        "Game": environment.split("-", 1)[-1], "Seed": str(seed), "Run URL": ""})
+            rows.append(row)
+            matches = [row]
+        for row in matches:
+            if "env_name" in values:
+                row["Environment"] = values["env_name"]
+                row["Game"] = values["env_name"].split("-", 1)[-1]
+            if "seed" in values:
+                row["Seed"] = str(values["seed"])
+            if "retrieval_enabled" in values:
+                enabled = values["retrieval_enabled"]
+                label = "Retrieval ON" if enabled else "Retrieval OFF"
+                if enabled:
+                    for prefix in ("Retrieval ON", "Retrieval Unknown"):
+                        if row.get("Config", "").startswith(prefix):
+                            label += row["Config"][len(prefix):]
+                            break
+                row["Retrieval Enable"] = str(enabled)
+                row["Config"] = label
+            if "score" in values:
+                row[SCORE_KEY] = row["Eval Return"] = number(values["score"])
+                row.update({"State": "finished", "Score Status": "ok", "Error": "",
+                            "Score Source": "override: " + values.get("source", "user-confirmed evaluation")})
+                for key in ("steps", "episodes", "num_envs", "model_step", "action_step", "checkpoint"):
+                    # Do not attribute metadata from an earlier evaluation to the new score.
+                    row["Evaluation-final/" + key] = values.get(key, "N/A")
+    return rows
 
 
 def classify_run(run, history_fallback=True, config_overrides=None):
@@ -158,7 +211,7 @@ def classify_run(run, history_fallback=True, config_overrides=None):
         "Commit": getattr(run, "commit", None), "Created At": run.created_at,
         "Run URL": run.url,
     }
-    score = number(row[SCORE_KEY])
+    score = number((config_overrides or {}).get("score", row[SCORE_KEY]))
     if score is not None:
         row["Score Source"] = "summary"
     elif retrieval == "Both":
@@ -181,6 +234,7 @@ def classify_run(run, history_fallback=True, config_overrides=None):
     row[SCORE_KEY] = row["Eval Return"] = score if score is not None else "N/A"
     if score is not None:
         row["Score Status"] = "ok"
+    apply_run_overrides([row], {run.id: config_overrides or {}}, add_missing=False)
     return {key: "N/A" if value is None else value for key, value in row.items()}
 
 
@@ -217,7 +271,7 @@ def main(argv=None):
                         help="W&B displayName regex; use '' to include every project run")
     parser.add_argument("--no-history-fallback", action="store_true")
     parser.add_argument("--run-overrides", type=Path,
-                        help="Run-ID corrections; defaults to results/run_overrides.json when present")
+                        help="Run-ID/name config and score corrections; defaults to results/run_overrides.json")
     parser.add_argument("--timeout", type=int, default=30)
     args = parser.parse_args(argv)
     try:
@@ -243,7 +297,7 @@ def main(argv=None):
         rows = []
         for run in api.runs(project, filters=filters, order="+created_at", per_page=100):
             row = classify_run(run, history_fallback=not args.no_history_fallback,
-                               config_overrides=overrides_by_id.get(run.id))
+                               config_overrides=overrides_by_id.get(run.id, overrides_by_id.get(run.name)))
             rows.append(row)
             print(f"[{len(rows)}] {row['Run Name']}: {row[SCORE_KEY]} "
                   f"({row['Score Status']}, {row['State']})", flush=True)

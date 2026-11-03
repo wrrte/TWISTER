@@ -42,13 +42,37 @@ def login_wandb(enabled=True, project=None, entity=None, relogin=False):
     print("W&B login verified.", flush=True)
 
 
-def init_wandb_run(callback_path, project=None, entity=None):
+def _config_value(value):
+    if isinstance(value, dict):
+        return {str(key): _config_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_config_value(item) for item in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, type):
+        return value.__module__ + "." + value.__qualname__
+    return str(value)
+
+
+def model_run_config(model):
+    """Snapshot actual model settings without changing the model's configuration."""
+    config = dict(getattr(model, "config", {}))
+    if isinstance(config.get("env_name"), (list, tuple)):
+        config["env_name"] = "-".join(config["env_name"])
+    retrieval = getattr(model, "retrieval", None)
+    if retrieval is not None:
+        config["retrieval"] = retrieval.config
+    return _config_value(config)
+
+
+def init_wandb_run(callback_path, project=None, entity=None, config=None):
     settings = _load_settings()
     run = wandb.init(
         project=project or settings.project or "nnet",
         entity=entity or settings.entity,
         sync_tensorboard=True,
         name=callback_path,
+        config=config,
     )
     print("W&B run: mode={}, entity={}, project={}, name={}".format(
         run.settings.mode, run.entity, run.project, run.name), flush=True)

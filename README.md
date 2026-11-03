@@ -192,6 +192,15 @@ the resolved entity, project, run name, project URL, and run URL. Run names reta
 the callback path: `callbacks/<run_name>/<env_name>` (including warmup/branch
 suffixes when applicable).
 
+Each new training run passes the actual model configuration to `wandb.init(config=...)`,
+including `env_name`, `seed`, `retrieval_enabled`, resolved retrieval settings, and
+training/evaluation parameters. Environment names are stored as strings and retrieval
+ON/OFF as JSON booleans so result exports can classify them automatically. Python
+classes, dtypes, and transforms are converted to text for logging. Shared warmup
+records `"Both"`; each branch records its actual ON/OFF setting. This takes effect
+for newly started runs. Historical runs with missing config still need confirmed
+corrections in `results/run_overrides.json`.
+
 ```bash
 env_name=atari100k-gopher run_name=gopher_seed3110 python3 -u main.py --seed 3110 --wandb_project twister --wandb_entity YOUR_TEAM
 ```

@@ -1,5 +1,3 @@
-env_name=atari100k-breakout override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9997
-env_name=atari100k-chopper_command override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9997
 env_name=atari100k-crazy_climber override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9997
 env_name=atari100k-demon_attack override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9997
 env_name=atari100k-freeway override_config='{"retrieval_enabled":false}' python3 -u main.py --seed 9997

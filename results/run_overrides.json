@@ -1,15 +1,87 @@
 {
-  "meo5982l": {"retrieval_enabled": false},
-  "c63th3gl": {"retrieval_enabled": false},
-  "pguqfv5b": {"retrieval_enabled": false},
-  "j994dj5d": {"retrieval_enabled": false},
-  "12r1xvsy": {"retrieval_enabled": false},
-  "iaf8kz8p": {"retrieval_enabled": false},
-  "sl8lflfn": {"retrieval_enabled": false},
-  "7j5atw93": {"retrieval_enabled": false},
-  "l7q4eyjp": {"retrieval_enabled": false},
-  "cfmagzmy": {"retrieval_enabled": false},
-  "2ocvubqa": {"retrieval_enabled": false},
-  "xetdccow": {"retrieval_enabled": false},
-  "6pn495jh": {"retrieval_enabled": false}
+  "meo5982l": {
+    "retrieval_enabled": false
+  },
+  "c63th3gl": {
+    "retrieval_enabled": false
+  },
+  "pguqfv5b": {
+    "retrieval_enabled": false
+  },
+  "j994dj5d": {
+    "retrieval_enabled": false
+  },
+  "12r1xvsy": {
+    "retrieval_enabled": false
+  },
+  "iaf8kz8p": {
+    "retrieval_enabled": false
+  },
+  "sl8lflfn": {
+    "retrieval_enabled": false
+  },
+  "7j5atw93": {
+    "retrieval_enabled": false
+  },
+  "l7q4eyjp": {
+    "retrieval_enabled": false
+  },
+  "cfmagzmy": {
+    "retrieval_enabled": false
+  },
+  "2ocvubqa": {
+    "retrieval_enabled": false
+  },
+  "xetdccow": {
+    "retrieval_enabled": false
+  },
+  "6pn495jh": {
+    "retrieval_enabled": false
+  },
+  "callbacks/kangaroo_seed9998/atari100k-kangaroo": {
+    "retrieval_enabled": false,
+    "score": 924,
+    "steps": 2164.92,
+    "episodes": 100,
+    "num_envs": 32,
+    "model_step": 100000,
+    "checkpoint": "callbacks/kangaroo_seed9998/atari100k-kangaroo/checkpoints_epoch_50_step_100000.ckpt",
+    "source": "standalone evaluation, user confirmed 2026-11-03"
+  },
+  "f4uu5knq": {
+    "retrieval_enabled": false
+  },
+  "as6v86wy": {
+    "retrieval_enabled": false
+  },
+  "ftnqw3zd": {
+    "retrieval_enabled": false
+  },
+  "153qwcr7": {
+    "retrieval_enabled": false
+  },
+  "i59k9p4k": {
+    "retrieval_enabled": false
+  },
+  "ya2uhwtr": {
+    "retrieval_enabled": false
+  },
+  "pwa555yc": {
+    "retrieval_enabled": false
+  },
+  "xr0piwr2": {
+    "retrieval_enabled": false
+  },
+  "vgor4qda": {
+    "retrieval_enabled": false
+  },
+  "bdnhce3m": {
+    "retrieval_enabled": false
+  },
+  "callbacks/atari100k_seed3110/atari100k-gopher": {
+    "retrieval_enabled": false,
+    "score": 33627.2,
+    "steps": 58265.52,
+    "source": "RTX3090 standalone evaluation, user confirmed 2026-11-03"
+  }
 }

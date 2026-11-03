@@ -10,7 +10,7 @@ from statistics import mean
 import sys
 import tempfile
 
-from classify_wandb_runs import HERE, SCORE_KEY, load_run_overrides, number
+from classify_wandb_runs import FIELDS, HERE, SCORE_KEY, apply_run_overrides, load_run_overrides, number
 
 
 # (Random, Human, TWISTER paper): transcribed from the user's table, 2026-10-22.
@@ -104,22 +104,11 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
         if required - set(fields):
             raise ValueError(f"Missing CSV columns: {', '.join(sorted(required - set(fields)))}")
         rows = list(reader)
-    # Reapply confirmed run-ID corrections even when converting an older CSV.
+    # Reapply confirmed corrections and include evaluated runs absent from an older CSV.
     overrides = load_run_overrides(run_overrides_path)
-    for row in rows:
-        correction = overrides.get(row.get("Run ID"))
-        if correction is not None:
-            enabled = correction["retrieval_enabled"]
-            row["Retrieval Enable"] = str(enabled)
-            label = "Retrieval ON" if enabled else "Retrieval OFF"
-            if enabled:
-                for prefix in ("Retrieval ON", "Retrieval Unknown"):
-                    if row["Config"].startswith(prefix):
-                        label += row["Config"][len(prefix):]
-                        break
-            row["Config"] = label
-            if "Retrieval Enable" not in fields:
-                fields.append("Retrieval Enable")
+    apply_run_overrides(rows, overrides)
+    if overrides:
+        fields.extend(field for field in FIELDS if field not in fields)
     if output == csv_path.resolve():
         raise ValueError("Excel output must differ from the input CSV path")
 
@@ -156,6 +145,7 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
             cells.append(value)
             comments.append("\n".join(
                 f"{row.get('Run ID', '')} | {row['State']} | {row[SCORE_KEY]}\n"
+                f"{row.get('Score Source', '')}\n"
                 f"{row.get('Run URL', '')}" for row in entries))
         retrieval = {row.get("Retrieval Enable", "").lower()
                      for entries in by_seed.values() for row in entries}
@@ -276,7 +266,7 @@ def main(argv=None):
     parser.add_argument("--input", type=Path, default=HERE / "wandb_runs_classification.csv")
     parser.add_argument("--output", type=Path, default=HERE / "performance_twister.xlsx")
     parser.add_argument("--run-overrides", type=Path,
-                        help="Run-ID corrections; defaults to results/run_overrides.json when present")
+                        help="Run-ID/name config and score corrections; defaults to results/run_overrides.json")
     args = parser.parse_args(argv)
     try:
         convert_csv_to_excel(args.input, args.output, args.run_overrides)

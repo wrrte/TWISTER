@@ -567,6 +567,8 @@ class TWISTER(models.Model):
 
         from .twister_evaluation import evaluate_final
         losses, metrics = evaluate_final(self, verbose_progress_bar)
+        from run_results import save_final_evaluation
+        save_final_evaluation(callback_path, self, metrics, checkpoint)
         self.print_step(losses, metrics, "final eval")
         if writer is not None:
             # Keep the dataset-indexed TensorBoard tag separate from direct wandb metrics.

@@ -20,6 +20,9 @@ class SharedWarmupComplete(BaseException):
 def prepare_retrieval_run(args):
     branch = getattr(args, "retrieval_branch", None)
     shared = getattr(args, "shared_warmup", None)
+    warmup_only = getattr(args, "warmup_only", False)
+    if warmup_only and (branch or args.mode != "training"):
+        raise ValueError('--warmup_only requires shared-warmup training without --retrieval_branch')
     if bool(branch) != bool(shared):
         raise ValueError("--retrieval_branch and --shared_warmup must be used together")
     if branch:
@@ -49,6 +52,8 @@ def prepare_retrieval_run(args):
         game_name = os.environ["env_name"].split("-", 1)[-1]
         os.environ["run_name"] = f"{game_name}_seed{override['seed']}"
     if override.get("retrieval_enabled") != "Both":
+        if warmup_only:
+            raise ValueError('--warmup_only requires retrieval_enabled="Both"')
         return None
     if args.mode != "training":
         raise ValueError('retrieval_enabled="Both" is a training mode; evaluate an ON/OFF branch instead')
@@ -56,7 +61,7 @@ def prepare_retrieval_run(args):
     plan = dict(version=1, run_name=run_name, env_name=os.environ["env_name"],
                 override_config=override, config_file=args.config_file,
                 cli={key: value for key, value in vars(args).items()
-                     if key not in ("checkpoint", "load_last", "retrieval_branch", "shared_warmup")})
+                     if key not in ("checkpoint", "load_last", "retrieval_branch", "shared_warmup", "warmup_only")})
     os.environ["run_name"] = run_name + "_warmup"
     return plan
 
@@ -109,6 +114,8 @@ def fit_retrieval_run(model, args, fit_kwargs):
     finally:
         close_environments(model)
     if completed is not None:
+        if getattr(args, "warmup_only", False):
+            return completed
         enabled, disabled = branch_commands(completed)
         launch_training_branches(completed, enabled, disabled)
         raise RuntimeError("The branch supervisor unexpectedly returned")

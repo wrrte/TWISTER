@@ -76,6 +76,66 @@ branch. When manually resuming a branch, omit `--seed` or use its saved value.
 The saved checkpoint RNG takes precedence over restarting the seed sequence.
 The seed controls randomness; CUDA operations can still be nondeterministic.
 
+### Paper-score reproduction search
+
+`0_train.sh` through `7_train.sh` run GPU workers for a shared reproduction search.
+Use a Python environment with the TWISTER dependencies and Atari ROMs:
+
+```bash
+./0_train.sh
+# Optional: another terminal/GPU joins the same search.
+./6_train.sh
+```
+
+Each round tries every unfinished Atari100k game once, in the order in
+`results/append_missing_atari_jobs.py`. The first round uses seed 10000, the next
+10001, and so on. Workers finish the entire round, including any baselines,
+before starting the next. Multiple workers share locks across GPU models.
+
+For each trial, save shared warmup, finish full FLASH (retrieval ON), and run the
+final evaluation (100 episodes by default). Start baseline (retrieval OFF) from
+**the same shared warmup** only when
+`full_FLASH_score >= paper_score - 0.1 * (human_score - random_score)`.
+This is an absolute HNS margin of 0.1, not 10% of the paper score. Reference
+values come from `REFERENCE_SCORES` in `results/convert_csv_to_excel.py` and are
+saved with the search settings. A game leaves the search after four qualifying
+full FLASH seeds and their completed baselines. Baseline score does not affect
+qualification or ranking.
+
+Keep only the **four highest full FLASH scores per game**, even when all four
+are below the qualification threshold. Keep all trials until four scored trials
+exist. After a fifth finishes full FLASH evaluation, prune the lower scoring
+trial's complete artifact directory: warmup/replay, resume/final checkpoints,
+ON/OFF outputs, and local logs. Ties favor the earlier trial. The active trial
+can temporarily be a fifth directory while it trains. Numeric results remain in
+the state file after pruning. Existing runs outside this search are untouched.
+
+State defaults to `results/reproduction/state.json`; artifacts are grouped under
+`callbacks/reproduction/<search_id>/<game>/round_<N>/`. Each retained round's
+directories must stay together at their original paths because branches refer
+to shared replay by absolute path. W&B local files also live in the round's
+directory; uploaded W&B runs are not deleted. Final evaluation is saved locally
+as `final_evaluation.json` with or without W&B.
+
+```bash
+python reproduce.py --status
+# Options for a NEW search (all its GPU workers must use the same --state).
+./0_train.sh --state results/reproduction/experiment.json --games gopher pong --start-seed 20000 --no-wandb
+# Run at most one trial. Check a stage's warmup.log/full_flash.log/baseline.log
+# inside its round directory for detailed training progress.
+./0_train.sh --once
+```
+
+Initial settings are frozen from `configs/defaults.json` plus `override_config`.
+The search enforces shared warmup, replay loading, and final evaluation. Restart
+the worker with the same state path to continue after interruption. Completed
+warmup and evaluations are reused; an incomplete ON/OFF branch restarts from the
+saved shared warmup. A training error stops that worker and leaves a retryable
+trial, rather than counting it as a low score. No GPU training starts during
+`--status`. Set `TWISTER_PYTHON` to select a Python executable explicitly.
+
+Offline control-flow/retention tests: `python -m unittest discover -s validation -v`.
+
 ### GPU job queues
 
 `6_run_twister_queue.sh` and `7_run_twister_queue.sh` run persistent queue workers

@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "server": "a",
+  "search_id": "search_2adad0c4cf444365b65e08b887d07bed",
+  "round": 1,
+  "updated_at": "2026-11-08T02:40:42+00:00",
+  "games": {
+    "alien": {
+      "attempts": 1,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "baseline"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 881.1,
+          "delta_hns": -0.01288405797101449,
+          "baseline_complete": false
+        }
+      ]
+    },
+    "amidar": {
+      "attempts": 1,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "baseline"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 213.78,
+          "delta_hns": 0.01737456242707118,
+          "baseline_complete": false
+        }
+      ]
+    },
+    "assault": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "asterix": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "bank_heist": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "battle_zone": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "boxing": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "breakout": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "chopper_command": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "crazy_climber": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "demon_attack": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "freeway": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    }
+  }
+}

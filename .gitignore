@@ -10,3 +10,4 @@ env_twister/*
 job_queue_*.lock
 tests/
 results/reproduction/
+reproduction.local.json

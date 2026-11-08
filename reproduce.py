@@ -25,6 +25,8 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_STATE = ROOT / "results" / "reproduction" / "state.json"
 KEEP = 4
 HNS_MARGIN = 0.1
+START_SEED = 3090
+SEED_STEP = 10
 MARKER = ".reproduction_trial.json"
 
 
@@ -127,7 +129,7 @@ class Campaign:
             games = list(table) if games is None else games
             if not games or len(set(games)) != len(games) or set(games) - set(table):
                 raise ValueError("--games must contain distinct Atari ROM names from the reference table")
-            start_seed = 10000 if start_seed is None else start_seed
+            start_seed = START_SEED if start_seed is None else start_seed
             validate_seed(start_seed)
             override = load_run_config()
             override.update(retrieval_enabled="Both", final_eval_enabled=True,
@@ -135,7 +137,7 @@ class Campaign:
             override.pop("seed", None)
             state = dict(version=1, root=str(ROOT), search_id="search_" + uuid.uuid4().hex,
                          round=1, trials=[], config=dict(
-                             games=games, start_seed=start_seed, no_wandb=bool(no_wandb),
+                             games=games, start_seed=start_seed, seed_step=SEED_STEP, no_wandb=bool(no_wandb),
                              python=sys.executable, override_config=override,
                              references={game: table[game] for game in games}, keep=KEEP,
                              hns_margin=HNS_MARGIN))
@@ -177,6 +179,10 @@ class Campaign:
     def claim(self):
         with self.locked():
             state = self.read()
+            if state["config"].get("server"):
+                from reproduction_cluster import apply_assignment
+                if apply_assignment(state):
+                    write_json(self.path, state)
             self._cleanup(state)
             # A lease is inherited by the child as well: killing only its worker
             # cannot let another GPU reuse this trial while training is alive.
@@ -195,7 +201,11 @@ class Campaign:
                 for game in games:
                     if game in seen or len(successful_trials(state, game)) >= KEEP:
                         continue
-                    seed = state["config"]["start_seed"] + state["round"] - 1
+                    # A newly assigned game starts at 3090 even if this server
+                    # is already in a later round. Legacy campaigns keep step 1.
+                    attempt = 1 + sum(trial["game"] == game for trial in state["trials"])
+                    seed = (state["config"]["start_seed"]
+                            + (attempt - 1) * state["config"].get("seed_step", 1))
                     validate_seed(seed)
                     trial = dict(game=game, seed=seed, round=state["round"], status="running",
                                  stage="warmup", full_flash=None, baseline=None, retained=True,
@@ -332,18 +342,26 @@ def show_status(state):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--state", type=Path, default=DEFAULT_STATE, help="Shared by all GPU workers; resumes when present")
+    parser.add_argument("--state", type=Path, help="Shared by local GPU workers; defaults to the server's configured state, otherwise results/reproduction/state.json")
     parser.add_argument("--games", nargs="+", help="Initial game order (default: all 26 Atari100k games)")
-    parser.add_argument("--start-seed", type=int, help="First round seed (default: 10000); each round adds one")
+    parser.add_argument("--start-seed", type=int, help="First round seed (default: 3090); each round adds 10")
     parser.add_argument("--no-wandb", action="store_true", default=None, help="Disable W&B for a new campaign")
     parser.add_argument("--status", action="store_true", help="Read progress without training or pruning")
     parser.add_argument("--once", action="store_true", help="Run at most one trial, then exit")
+    parser.add_argument("--server", choices=("a", "b", "c"), help="Bind this server to its game assignment; normally set once with reproduction_cluster.py setup")
     args = parser.parse_args(argv)
-    campaign = Campaign(args.state)
+    from reproduction_cluster import attach_server, local_settings
+    settings = local_settings()
+    campaign = Campaign(args.state or settings.get("state") or DEFAULT_STATE)
     if args.status:
         show_status(campaign.read())
         return 0
     campaign.initialize(args.games, args.start_seed, args.no_wandb)
+    server = args.server
+    if server is None and settings.get("state") == str(campaign.path):
+        server = settings.get("server")
+    if server:
+        attach_server(campaign, server)
 
     def interrupted(signum, _frame):
         raise KeyboardInterrupt(signum)

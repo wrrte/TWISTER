@@ -78,6 +78,10 @@ The seed controls randomness; CUDA operations can still be nondeterministic.
 
 ### Paper-score reproduction search
 
+For three independent servers with 4/4/1 GPUs and daily Git exchange, see
+[multi-server setup and daily sync](reproduction/README.md). Each server runs
+its own rounds and owns a distinct game subset; weights/replay stay local.
+
 `0_train.sh` through `7_train.sh` run GPU workers for a shared reproduction search.
 Use a Python environment with the TWISTER dependencies and Atari ROMs:
 
@@ -88,8 +92,10 @@ Use a Python environment with the TWISTER dependencies and Atari ROMs:
 ```
 
 Each round tries every unfinished Atari100k game once, in the order in
-`results/append_missing_atari_jobs.py`. The first round uses seed 10000, the next
-10001, and so on. Workers finish the entire round, including any baselines,
+`results/append_missing_atari_jobs.py`. The first round uses seed 3090, the next
+3100, then 3110, increasing by 10 per attempt of each game. Initially all games
+in a round use the same seed; a newly assigned unstarted game begins at 3090.
+Workers finish the local round, including any baselines,
 before starting the next. Multiple workers share locks across GPU models.
 
 For each trial, save shared warmup, finish full FLASH (retrieval ON), and run the

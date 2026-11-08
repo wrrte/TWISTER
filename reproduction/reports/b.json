@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "server": "b",
+  "search_id": "search_55ef5d85540b44deb4e3af0ae3b0ecc8",
+  "round": 1,
+  "updated_at": "2026-11-08T03:04:36+00:00",
+  "games": {
+    "frostbite": {
+      "attempts": 1,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
+      "top": []
+    },
+    "gopher": {
+      "attempts": 1,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
+      "top": []
+    },
+    "hero": {
+      "attempts": 1,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
+      "top": []
+    },
+    "jamesbond": {
+      "attempts": 1,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
+      "top": []
+    },
+    "kangaroo": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "krull": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "kung_fu_master": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "ms_pacman": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "pong": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "private_eye": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "qbert": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "freeway": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    }
+  }
+}

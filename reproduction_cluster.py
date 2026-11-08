@@ -7,6 +7,8 @@ import fcntl
 import json
 from pathlib import Path
 import re
+import shutil
+import socket
 import subprocess
 import sys
 
@@ -37,6 +39,8 @@ def load_plan():
             raise ValueError("Invalid server name or GPU count")
         if not isinstance(entry.get("games"), list) or not entry["games"]:
             raise ValueError(f"Server {name} needs at least one game")
+        if entry.get("gpu_model") is not None and not isinstance(entry["gpu_model"], str):
+            raise ValueError(f"Invalid GPU model for server {name}")
         assigned.extend(entry["games"])
     if len(assigned) != len(set(assigned)) or set(assigned) != set(reproduce.references()):
         raise ValueError("Server plan must assign each of the 26 games exactly once")
@@ -76,7 +80,48 @@ def attach_server(campaign, server):
         return state
 
 
-def setup_server(campaign, server):
+def reset_campaign(campaign, server):
+    """Explicit reset removes only this campaign's owned trial artifacts."""
+    with campaign.locked():
+        if not campaign.path.exists():
+            return
+        state = campaign.read()
+        if state["config"].get("server", server) != server:
+            raise ValueError("Cannot reset a campaign bound to another server")
+        leases = []
+        directories = []
+        try:
+            for trial in state["trials"]:
+                lease = campaign._lease(trial)
+                if lease is None:
+                    raise ValueError("Stop all N_train.sh workers before setup --reset; a trial is still running")
+                leases.append(lease)
+                directory = reproduce.artifact_dir(state, trial)
+                if directory.is_symlink() or directory.resolve() != directory:
+                    raise ValueError(f"Refusing to reset a symlink path: {directory}")
+                if directory.exists():
+                    marker = directory / reproduce.MARKER
+                    if not trial.get("reset_verified") and (marker.is_symlink() or not marker.is_file()
+                            or json.loads(marker.read_text()) != reproduce.identity(state, trial)):
+                        raise ValueError(f"Refusing to delete an unowned trial directory: {directory}")
+                    trial["reset_verified"] = True
+                    directories.append(directory)
+            # Validate every lease/marker before deleting any artifacts.
+            state["reset_pending"] = server
+            write_json(campaign.path, state)
+            for directory in directories:
+                shutil.rmtree(directory)
+                for parent in (directory.parent, directory.parent.parent):
+                    if parent.exists() and not any(parent.iterdir()):
+                        parent.rmdir()
+            campaign.path.unlink()
+        finally:
+            for lease in leases:
+                lease.close()
+    print(f"Reset local state and {len(directories)} owned trial artifact directories.")
+
+
+def setup_server(campaign, server, reset=False):
     settings = local_settings()
     if settings.get("server", server) != server:
         raise ValueError("This machine is already configured as another server")
@@ -85,6 +130,8 @@ def setup_server(campaign, server):
     plan = load_plan()
     if server not in plan["servers"]:
         raise ValueError(f"Unknown server: {server}")
+    if reset:
+        reset_campaign(campaign, server)
     if not campaign.path.exists():
         campaign.initialize(plan["servers"][server]["games"])
     state = attach_server(campaign, server)
@@ -100,6 +147,28 @@ def configured_campaign():
     if not settings.get("server") or not settings.get("state"):
         raise ValueError("Run reproduction_cluster.py setup a (or b/c) once on this server")
     return reproduce.Campaign(settings["state"]), settings
+
+
+def doctor(selected):
+    from gpu_runtime import check_gpu, query_devices
+
+    plan = load_plan()
+    settings = local_settings()
+    server = settings.get("server")
+    print(f"Host: {socket.gethostname()}\nPython: {sys.executable}")
+    print(f"Server role: {server or 'NOT CONFIGURED'}")
+    devices = query_devices()
+    for device in devices:
+        print(f"Physical GPU {device['index']}: {device['name']} ({device['uuid']})")
+    if server:
+        print(f"Configured workers: {plan['servers'][server]['gpus']} (physical inventory: {len(devices)})")
+    else:
+        matches = [name for name, entry in plan["servers"].items() if entry.get("gpu_model")
+                   and all(entry["gpu_model"].casefold() in device["name"].casefold() for device in devices)]
+        if len(matches) == 1:
+            print(f"Suggested setup: python reproduction_cluster.py setup {matches[0]}")
+    expected = plan["servers"][server].get("gpu_model") if server else None
+    check_gpu(expected, selected=selected, devices=devices)
 
 
 def export_report(campaign, server):
@@ -220,15 +289,21 @@ def main(argv=None):
     setup = commands.add_parser("setup", help="One-time local server identity; preserve existing local trials")
     setup.add_argument("server", choices=("a", "b", "c"))
     setup.add_argument("--state", type=Path, default=reproduce.DEFAULT_STATE)
+    setup.add_argument("--reset", action="store_true", help="Delete this local campaign's state and owned artifacts before setup; requires stopped workers")
     sync = commands.add_parser("sync", help="Export, commit this server's report, pull/rebase, push, and show all reports")
     sync.add_argument("--local-only", action="store_true", help="Export and show reports without any Git/network operations")
     commands.add_parser("status", help="Show the most recently exchanged reports")
+    diagnose = commands.add_parser("doctor", help="Check physical GPU models, server role, and selected PyTorch CUDA device without training")
+    diagnose.add_argument("--gpu", default="0", help="Physical nvidia-smi GPU index or UUID (default: 0)")
     move = commands.add_parser("move", help="Hand off an unstarted game from this server")
     move.add_argument("game")
     move.add_argument("target", choices=("a", "b", "c"))
     args = parser.parse_args(argv)
     if args.command == "setup":
-        setup_server(reproduce.Campaign(args.state), args.server)
+        setup_server(reproduce.Campaign(args.state), args.server, reset=args.reset)
+        return 0
+    if args.command == "doctor":
+        doctor(args.gpu)
         return 0
     if args.command == "status":
         show_reports()

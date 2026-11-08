@@ -179,6 +179,9 @@ class Campaign:
     def claim(self):
         with self.locked():
             state = self.read()
+            if state.get("reset_pending"):
+                raise ValueError("Reset is incomplete; stop workers and rerun reproduction_cluster.py setup "
+                                 + state["reset_pending"] + " --reset")
             if state["config"].get("server"):
                 from reproduction_cluster import apply_assignment
                 if apply_assignment(state):
@@ -349,6 +352,8 @@ def main(argv=None):
     parser.add_argument("--status", action="store_true", help="Read progress without training or pruning")
     parser.add_argument("--once", action="store_true", help="Run at most one trial, then exit")
     parser.add_argument("--server", choices=("a", "b", "c"), help="Bind this server to its game assignment; normally set once with reproduction_cluster.py setup")
+    parser.add_argument("--require-server", action="store_true", help="Require cluster setup before starting a worker")
+    parser.add_argument("--check-gpu", action="store_true", help="Verify selected GPU model and PyTorch CUDA before starting a worker")
     args = parser.parse_args(argv)
     from reproduction_cluster import attach_server, local_settings
     settings = local_settings()
@@ -356,10 +361,21 @@ def main(argv=None):
     if args.status:
         show_status(campaign.read())
         return 0
-    campaign.initialize(args.games, args.start_seed, args.no_wandb)
     server = args.server
     if server is None and settings.get("state") == str(campaign.path):
         server = settings.get("server")
+    if args.require_server and not server:
+        raise ValueError("Server is not configured. Run python reproduction_cluster.py setup b on A6000 "
+                         "(setup a for the 3090 server, setup c for the single-GPU server) before N_train.sh")
+    if args.check_gpu:
+        from gpu_runtime import check_gpu
+        from reproduction_cluster import load_plan
+        expected_model = load_plan()["servers"][server].get("gpu_model") if server else None
+        device, _ = check_gpu(expected_model)
+        # Bind by UUID so CUDA's enumeration order cannot select another card
+        # when several physical GPUs have the same model name.
+        os.environ["CUDA_VISIBLE_DEVICES"] = device["uuid"]
+    campaign.initialize(args.games, args.start_seed, args.no_wandb)
     if server:
         attach_server(campaign, server)
 

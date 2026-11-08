@@ -6,8 +6,9 @@
 `job_queue_3090.txt`와 다른 `job_queue_*.txt`는 이 실행에서 사용하지 않습니다.
 
 초기 배정은 A(4 GPU) 12게임, B(4 GPU) 11게임, C(1 GPU) 3게임입니다.
-GPU 종류에 따른 분기는 없으며, 서버 A는 현재 Alien/Amidar를 실행한 서버로
-잡았습니다. 배정된 게임 안에서 한 바퀴씩 돌고, 서버 간에는 라운드를 기다리지
+서버 A는 RTX 3090 서버, B는 RTX A6000 서버, C는 나머지 1-GPU 서버입니다.
+게임 배정은 이 역할 등록으로 결정하며, 학습 시작 시 선택한 GPU 모델과
+PyTorch의 CUDA 인식도 검사합니다. 배정된 게임 안에서 한 바퀴씩 돌고, 서버 간에는 라운드를 기다리지
 않습니다. 게임별 시드는 `3090, 3100, 3110, ...`입니다. 성공 시드 4개 확보,
 baseline 조건, full FLASH 점수 상위 4개 보관 규칙은 그대로 적용합니다.
 
@@ -31,6 +32,28 @@ python reproduction_cluster.py setup c
 설정은 Git에서 제외한 `reproduction.local.json`에 저장됩니다. 이후에는
 `N_train.sh`에 서버 이름이나 게임 목록을 반복해서 줄 필요가 없습니다.
 커스텀 상태 경로를 원하면 setup 시 `--state PATH`를 지정합니다.
+`setup`은 서버 역할 등록이며 학습을 실행하지 않습니다. 등록하지 않은 상태에서
+`N_train.sh`를 실행하면 모델을 생성하기 전에 설정 명령을 안내하고 종료합니다.
+
+A6000에서 등록 전에 잘못 시작한 학습을 지우고 B로 새로 시작하려면 모든
+worker를 중단한 상태에서 다음을 실행합니다. 이 옵션은 현재 로컬 탐색의
+상태와 소유권이 확인된 산출물만 삭제하며, 다른 탐색의 산출물은 유지합니다.
+
+```bash
+python reproduction_cluster.py setup b --reset
+```
+
+GPU 인식은 학습 없이 다음 명령으로 확인할 수 있습니다.
+
+```bash
+python reproduction_cluster.py doctor --gpu 0
+```
+
+호스트, 실제 GPU 모델/번호/UUID, 등록한 역할, Python 실행 파일과 PyTorch CUDA
+상태를 표시합니다. B 서버의 GPU 0이면 `NVIDIA RTX A6000`과 `cuda:0` 매핑이
+확인되어야 합니다. GPU UUID로 실제 장치를 고정하므로 동일 모델 GPU가 여러
+개 있어도 번호 혼동을 방지합니다. CUDA를 사용할 수 없거나 역할에 맞지 않는
+GPU이면 `N_train.sh`는 학습을 시작하지 않습니다.
 
 서버 A와 B에서는 사용 가능한 GPU 번호에 맞춰 네 worker를 각각 실행합니다.
 예를 들어 GPU 0, 1, 2, 3을 사용할 경우 터미널/tmux 창마다 다음 중 하나를

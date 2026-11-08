@@ -3,10 +3,12 @@
   "servers": {
     "a": {
       "gpus": 4,
+      "gpu_model": "3090",
       "games": ["alien", "amidar", "assault", "asterix", "bank_heist", "battle_zone", "boxing", "breakout", "chopper_command", "crazy_climber", "demon_attack", "freeway"]
     },
     "b": {
       "gpus": 4,
+      "gpu_model": "A6000",
       "games": ["frostbite", "gopher", "hero", "jamesbond", "kangaroo", "krull", "kung_fu_master", "ms_pacman", "pong", "private_eye", "qbert"]
     },
     "c": {

@@ -4,16 +4,45 @@
     "a": {
       "gpus": 4,
       "gpu_model": "3090",
-      "games": ["alien", "amidar", "assault", "asterix", "bank_heist", "battle_zone", "boxing", "breakout", "chopper_command", "crazy_climber", "demon_attack", "freeway"]
+      "games": [
+        "alien",
+        "amidar",
+        "assault",
+        "asterix",
+        "bank_heist",
+        "battle_zone",
+        "boxing",
+        "breakout",
+        "chopper_command",
+        "crazy_climber",
+        "demon_attack"
+      ]
     },
     "b": {
       "gpus": 4,
       "gpu_model": "A6000",
-      "games": ["frostbite", "gopher", "hero", "jamesbond", "kangaroo", "krull", "kung_fu_master", "ms_pacman", "pong", "private_eye", "qbert"]
+      "games": [
+        "frostbite",
+        "gopher",
+        "hero",
+        "jamesbond",
+        "kangaroo",
+        "krull",
+        "kung_fu_master",
+        "ms_pacman",
+        "pong",
+        "private_eye",
+        "qbert",
+        "freeway"
+      ]
     },
     "c": {
       "gpus": 1,
-      "games": ["road_runner", "seaquest", "up_n_down"]
+      "games": [
+        "road_runner",
+        "seaquest",
+        "up_n_down"
+      ]
     }
   }
 }

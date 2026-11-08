@@ -3,7 +3,7 @@
   "server": "a",
   "search_id": "search_2adad0c4cf444365b65e08b887d07bed",
   "round": 1,
-  "updated_at": "2026-11-08T02:43:07+00:00",
+  "updated_at": "2026-11-08T03:01:37+00:00",
   "games": {
     "alien": {
       "attempts": 1,
@@ -98,13 +98,6 @@
       "top": []
     },
     "demon_attack": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
-    },
-    "freeway": {
       "attempts": 0,
       "completed": 0,
       "successful_pairs": 0,

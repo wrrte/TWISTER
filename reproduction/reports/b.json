@@ -3,42 +3,164 @@
   "server": "b",
   "search_id": "search_55ef5d85540b44deb4e3af0ae3b0ecc8",
   "round": 1,
-  "updated_at": "2026-11-08T03:04:36+00:00",
+  "updated_at": "2026-11-09T07:20:21+00:00",
   "games": {
     "frostbite": {
       "attempts": 1,
-      "completed": 0,
-      "successful_pairs": 0,
+      "completed": 1,
+      "successful_pairs": 1,
       "latest": {
         "seed": 3090,
-        "status": "running",
-        "stage": "warmup"
+        "status": "complete",
+        "stage": "done"
       },
-      "top": []
+      "top": [
+        {
+          "seed": 3090,
+          "score": 322.3,
+          "delta_hns": 0.004051522248243562,
+          "baseline_complete": true
+        }
+      ]
     },
     "gopher": {
       "attempts": 1,
-      "completed": 0,
+      "completed": 1,
       "successful_pairs": 0,
       "latest": {
         "seed": 3090,
-        "status": "running",
-        "stage": "warmup"
+        "status": "complete",
+        "stage": "done"
       },
-      "top": []
+      "top": [
+        {
+          "seed": 3090,
+          "score": 2911.0,
+          "delta_hns": -8.970752089136491,
+          "baseline_complete": false
+        }
+      ]
     },
     "hero": {
       "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 1,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 13609.85,
+          "delta_hns": 0.16231584952515185,
+          "baseline_complete": true
+        }
+      ]
+    },
+    "jamesbond": {
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 1,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 588.0,
+          "delta_hns": 0.05474452554744526,
+          "baseline_complete": true
+        }
+      ]
+    },
+    "kangaroo": {
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 2134.0,
+          "delta_hns": -1.3013744552463962,
+          "baseline_complete": false
+        }
+      ]
+    },
+    "krull": {
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 5382.7,
+          "delta_hns": -3.23623595505618,
+          "baseline_complete": false
+        }
+      ]
+    },
+    "kung_fu_master": {
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 17918.0,
+          "delta_hns": -0.24575140137022866,
+          "baseline_complete": false
+        }
+      ]
+    },
+    "ms_pacman": {
+      "attempts": 1,
       "completed": 0,
       "successful_pairs": 0,
       "latest": {
         "seed": 3090,
         "status": "running",
-        "stage": "warmup"
+        "stage": "baseline"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 2161.5,
+          "delta_hns": -0.006696764484574868,
+          "baseline_complete": false
+        }
+      ]
+    },
+    "pong": {
+      "attempts": 1,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "full_flash"
       },
       "top": []
     },
-    "jamesbond": {
+    "private_eye": {
       "attempts": 1,
       "completed": 0,
       "successful_pairs": 0,
@@ -49,53 +171,15 @@
       },
       "top": []
     },
-    "kangaroo": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
-    },
-    "krull": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
-    },
-    "kung_fu_master": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
-    },
-    "ms_pacman": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
-    },
-    "pong": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
-    },
-    "private_eye": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
-    },
     "qbert": {
-      "attempts": 0,
+      "attempts": 1,
       "completed": 0,
       "successful_pairs": 0,
-      "latest": null,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
       "top": []
     },
     "freeway": {

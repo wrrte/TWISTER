@@ -91,12 +91,13 @@ Use a Python environment with the TWISTER dependencies and Atari ROMs:
 ./6_train.sh
 ```
 
-Each round tries every unfinished Atari100k game once, in the order in
-`results/append_missing_atari_jobs.py`. The first round uses seed 3090, the next
-3100, then 3110, increasing by 10 per attempt of each game. Initially all games
-in a round use the same seed; a newly assigned unstarted game begins at 3090.
-Workers finish the local round, including any baselines,
-before starting the next. Multiple workers share locks across GPU models.
+Workers prefer unfinished, idle games with the fewest previous attempts, using
+the configured game order to break ties. Each game's seeds are 3090, 3100,
+3110, and so on. Once every game has had its first job assigned, completed games
+can start their next seed while other games are still finishing their first.
+One game has at most one active trial, including its conditional baseline.
+The reported round is the highest trial round started on this server; games can
+be in different rounds. Multiple workers share locks across GPU models.
 
 For each trial, save shared warmup, finish full FLASH (retrieval ON), and run the
 final evaluation (100 episodes by default). Start baseline (retrieval OFF) from

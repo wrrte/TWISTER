@@ -189,41 +189,44 @@ class Campaign:
             self._cleanup(state)
             # A lease is inherited by the child as well: killing only its worker
             # cannot let another GPU reuse this trial while training is alive.
+            active_games = set()
             for trial in state["trials"]:
                 if trial["status"] != "complete":
+                    active_games.add(trial["game"])
                     lease = self._lease(trial)
                     if lease is not None:
                         trial.update(status="running", worker=f"{socket.gethostname()}:{os.getpid()}", error=None)
                         write_json(self.path, state)
                         return "trial", state, dict(trial), lease
             games = state["config"]["games"]
-            if all(len(successful_trials(state, game)) >= KEEP for game in games):
+            unfinished = [game for game in games if len(successful_trials(state, game)) < KEEP]
+            if not unfinished:
                 return "done", state, None, None
-            while True:
-                seen = {trial["game"] for trial in state["trials"] if trial["round"] == state["round"]}
-                for game in games:
-                    if game in seen or len(successful_trials(state, game)) >= KEEP:
-                        continue
-                    # A newly assigned game starts at 3090 even if this server
-                    # is already in a later round. Legacy campaigns keep step 1.
-                    attempt = 1 + sum(trial["game"] == game for trial in state["trials"])
-                    seed = (state["config"]["start_seed"]
-                            + (attempt - 1) * state["config"].get("seed_step", 1))
-                    validate_seed(seed)
-                    trial = dict(game=game, seed=seed, round=state["round"], status="running",
-                                 stage="warmup", full_flash=None, baseline=None, retained=True,
-                                 worker=f"{socket.gethostname()}:{os.getpid()}", error=None)
-                    lease = self._lease(trial)
-                    if lease is None:
-                        raise RuntimeError("New trial already has an active lease")
-                    state["trials"].append(trial)
-                    write_json(self.path, state)
-                    return "trial", state, dict(trial), lease
-                if any(trial["status"] != "complete" for trial in state["trials"]):
-                    return "wait", state, None, None
-                # No worker can start the next round until every trial in this
-                # round (including its conditional baseline) has finished.
-                state["round"] += 1
+            ready = [game for game in unfinished if game not in active_games]
+            if not ready:
+                return "wait", state, None, None
+            # Prefer games tried fewer times, breaking ties by the configured
+            # game order. Busy games do not hold up the next pass for idle ones.
+            attempts = {game: sum(trial["game"] == game for trial in state["trials"])
+                        for game in ready}
+            game = min(ready, key=attempts.__getitem__)
+            # Keep legacy artifact/lease round numbers unique, even for games
+            # assigned late under the old server-wide round counter.
+            round_number = 1 + max((trial["round"] for trial in state["trials"]
+                                    if trial["game"] == game), default=0)
+            seed = (state["config"]["start_seed"]
+                    + attempts[game] * state["config"].get("seed_step", 1))
+            validate_seed(seed)
+            trial = dict(game=game, seed=seed, round=round_number, status="running",
+                         stage="warmup", full_flash=None, baseline=None, retained=True,
+                         worker=f"{socket.gethostname()}:{os.getpid()}", error=None)
+            lease = self._lease(trial)
+            if lease is None:
+                raise RuntimeError("New trial already has an active lease")
+            state["round"] = max(state["round"], round_number)
+            state["trials"].append(trial)
+            write_json(self.path, state)
+            return "trial", state, dict(trial), lease
 
     def update(self, trial, **changes):
         with self.locked():

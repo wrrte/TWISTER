@@ -3,98 +3,158 @@
   "server": "a",
   "search_id": "search_2adad0c4cf444365b65e08b887d07bed",
   "round": 1,
-  "updated_at": "2026-11-08T03:01:37+00:00",
+  "updated_at": "2026-11-09T07:21:05+00:00",
   "games": {
     "alien": {
       "attempts": 1,
-      "completed": 0,
-      "successful_pairs": 0,
+      "completed": 1,
+      "successful_pairs": 1,
       "latest": {
         "seed": 3090,
-        "status": "running",
-        "stage": "baseline"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
           "seed": 3090,
           "score": 881.1,
           "delta_hns": -0.01288405797101449,
-          "baseline_complete": false
+          "baseline_complete": true
         }
       ]
     },
     "amidar": {
       "attempts": 1,
-      "completed": 0,
-      "successful_pairs": 0,
+      "completed": 1,
+      "successful_pairs": 1,
       "latest": {
         "seed": 3090,
-        "status": "running",
-        "stage": "baseline"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
           "seed": 3090,
           "score": 213.78,
           "delta_hns": 0.01737456242707118,
-          "baseline_complete": false
+          "baseline_complete": true
         }
       ]
     },
     "assault": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 1,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 925.09,
+          "delta_hns": 0.3924807692307693,
+          "baseline_complete": true
+        }
+      ]
     },
     "asterix": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 1,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 1364.0,
+          "delta_hns": 0.006993850235138068,
+          "baseline_complete": true
+        }
+      ]
     },
     "bank_heist": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 1,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 1251.9,
+          "delta_hns": 0.41935047361299066,
+          "baseline_complete": true
+        }
+      ]
     },
     "battle_zone": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 1,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 13710.0,
+          "delta_hns": 0.10882048926151372,
+          "baseline_complete": true
+        }
+      ]
     },
     "boxing": {
-      "attempts": 0,
+      "attempts": 1,
       "completed": 0,
       "successful_pairs": 0,
-      "latest": null,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
       "top": []
     },
     "breakout": {
-      "attempts": 0,
+      "attempts": 1,
       "completed": 0,
       "successful_pairs": 0,
-      "latest": null,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
       "top": []
     },
     "chopper_command": {
-      "attempts": 0,
+      "attempts": 1,
       "completed": 0,
       "successful_pairs": 0,
-      "latest": null,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
       "top": []
     },
     "crazy_climber": {
-      "attempts": 0,
+      "attempts": 1,
       "completed": 0,
       "successful_pairs": 0,
-      "latest": null,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
       "top": []
     },
     "demon_attack": {

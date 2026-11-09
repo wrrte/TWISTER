@@ -206,7 +206,10 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
         return sheet
 
     add_raw_sheet("Runs", rows)
-    add_raw_sheet("Missing", [row for row in rows if number(row[SCORE_KEY]) is None])
+    add_raw_sheet("Running", [row for row in rows if row.get("Score Status") == "running"])
+    add_raw_sheet("Missing", [row for row in rows
+                              if row.get("Score Status") != "running"
+                              and number(row[SCORE_KEY]) is None])
     for sheet in workbook:
         sheet.freeze_panes = "C2" if sheet.title == "Results" else "A2"
         sheet.auto_filter.ref = sheet.dimensions

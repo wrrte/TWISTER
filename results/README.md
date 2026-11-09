@@ -44,13 +44,16 @@ python results/convert_csv_to_excel.py
 `--name-regex ''`로 해제할 수 있습니다. 조회 결과가 없거나 API 호출에 실패하면
 기존 CSV를 교체하지 않습니다. 개별 history 조회 오류는 CSV의 `Error`에 기록하고
 종료 코드 1을 반환합니다. 아직 점수가 없는 run은 `N/A`로 남깁니다.
+실행 중인 run은 `Score Status`를 `running`으로 표시합니다. 이 상태는 점수 유무와
+warmup 여부보다 우선하며, 실행 중인 run의 history는 조회하지 않습니다.
 
 CSV에는 게임, 환경, 시드, retrieval 설정, 최종 점수와 평가 정보, 상태, run ID와
 링크를 기록합니다. 시드는 config → run 이름의 `seed숫자` → W&B metadata의
 `--seed` 순서로 찾습니다. retrieval은 기록된 config와 `_O`/`_X` 분기 접미사를
 사용합니다. 과거 TWISTER run은 config를 업로드하지 않았을 수 있으므로, 판단할
 근거가 없으면 `Unknown`으로 둡니다. 현재 로컬 defaults를 과거 run에 적용하지
-않습니다. `_warmup` run은 공유 중간 단계로 분류하고 history를 조회하지 않습니다.
+않습니다. 실행 중이 아닌 `_warmup` run은 `warmup`으로 분류하고 history를 조회하지
+않습니다. 실행 중인 `_warmup` run은 `running`으로 분류하되 retrieval 설정은 보존합니다.
 
 사용자가 2026-10-22에 확인한 기존 11개 run은 모두 retrieval 미사용 baseline입니다.
 이 확인 내용은 `run_overrides.json`에 run ID별로 저장하여 다음 API 추출에도
@@ -114,7 +117,9 @@ Excel 시트:
   실행 중인 run은 `RUNNING`으로 표시합니다. 셀 메모에서 원본 점수와 run 링크를
   모두 확인할 수 있습니다.
 - `Runs`: 보정된 CSV 행과 추가한 로컬 평가 행. 시드 미확인 run도 보존합니다.
-- `Missing`: 최종 점수가 없는 run. 실패, 실행 중, warmup 등을 상태로 구분합니다.
+- `Running`: 실행 중인 모든 run. 실행 중인 shared warmup도 포함합니다.
+- `Missing`: 실행 중인 run을 제외하고 최종 점수가 없는 run. 실패, warmup 등을
+  상태로 구분합니다.
 
 오른쪽 비교 지표는 STORM과 같은 행별 비교 방식으로 계산합니다.
 

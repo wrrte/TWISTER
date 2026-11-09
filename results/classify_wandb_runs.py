@@ -167,11 +167,18 @@ def apply_run_overrides(rows, overrides, add_missing=True):
                 row["Config"] = label
             if "score" in values:
                 row[SCORE_KEY] = row["Eval Return"] = number(values["score"])
-                row.update({"State": "finished", "Score Status": "ok", "Error": "",
+                if row.get("State") != "running":
+                    row["State"] = "finished"
+                row.update({"Score Status": "ok", "Error": "",
                             "Score Source": "override: " + values.get("source", "user-confirmed evaluation")})
                 for key in ("steps", "episodes", "num_envs", "model_step", "action_step", "checkpoint"):
                     # Do not attribute metadata from an earlier evaluation to the new score.
                     row["Evaluation-final/" + key] = values.get(key, "N/A")
+    # Running takes precedence over scores and shared-warmup classification,
+    # including when converting a CSV exported before this status was introduced.
+    for row in rows:
+        if row.get("State") == "running":
+            row["Score Status"] = "running"
     return rows
 
 
@@ -214,6 +221,9 @@ def classify_run(run, history_fallback=True, config_overrides=None):
     score = number((config_overrides or {}).get("score", row[SCORE_KEY]))
     if score is not None:
         row["Score Source"] = "summary"
+    elif run.state == "running":
+        # An active run has not reached its final result; do not scan history.
+        row["Score Status"] = "running"
     elif retrieval == "Both":
         row["Score Status"] = "warmup"
     elif history_fallback:

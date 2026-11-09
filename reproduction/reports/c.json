@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "server": "c",
+  "search_id": "search_c7a15c343a18433ba72f14ac26630fea",
+  "round": 1,
+  "updated_at": "2026-11-09T07:21:15+00:00",
+  "games": {
+    "road_runner": {
+      "attempts": 1,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": {
+        "seed": 3090,
+        "status": "running",
+        "stage": "warmup"
+      },
+      "top": []
+    },
+    "seaquest": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    },
+    "up_n_down": {
+      "attempts": 0,
+      "completed": 0,
+      "successful_pairs": 0,
+      "latest": null,
+      "top": []
+    }
+  }
+}

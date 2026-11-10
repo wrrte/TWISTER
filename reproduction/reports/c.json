@@ -3,24 +3,35 @@
   "server": "c",
   "search_id": "search_c7a15c343a18433ba72f14ac26630fea",
   "round": 1,
-  "updated_at": "2026-11-09T07:21:15+00:00",
+  "updated_at": "2026-11-10T05:39:11+00:00",
   "games": {
     "road_runner": {
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 1,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 18303.0,
+          "delta_hns": 0.06013021830716201,
+          "baseline_complete": true
+        }
+      ]
+    },
+    "seaquest": {
       "attempts": 1,
       "completed": 0,
       "successful_pairs": 0,
       "latest": {
         "seed": 3090,
-        "status": "running",
+        "status": "interrupted",
         "stage": "warmup"
       },
-      "top": []
-    },
-    "seaquest": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
       "top": []
     },
     "up_n_down": {

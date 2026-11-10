@@ -68,7 +68,8 @@ def load_model(args):
 
     # Load Checkpoint
     if args.checkpoint is not None:
-        model.load(os.path.join(args.config.callback_path, args.checkpoint))
+        model.load(os.path.join(args.config.callback_path, args.checkpoint),
+                   evaluation_only=args.mode == "final_evaluation")
 
     # Model Summary
     model.summary(show_dict=args.show_dict, show_modules=args.show_modules)

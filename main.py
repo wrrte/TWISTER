@@ -27,7 +27,9 @@ import os
 import argparse
 import importlib
 import warnings
-from retrieval_runs import prepare_retrieval_run, fit_retrieval_run
+import sys
+from retrieval_runs import (prepare_retrieval_run, fit_retrieval_run,
+                            WarmupBoundaryUnavailable, WARMUP_UNAVAILABLE_EXIT_CODE)
 from wandb_logging import login_wandb
 
 # Disable Warnings
@@ -44,7 +46,7 @@ def main(args):
 
     # Load Config
     retrieval_plan = prepare_retrieval_run(args)
-    if args.mode == "training":
+    if args.mode in ("training", "final_evaluation"):
         login_wandb(
             enabled=args.wandb,
             project=args.wandb_project,
@@ -103,6 +105,25 @@ def main(args):
             verbose_progress_bar=args.verbose_progress_bar,
         )
 
+    elif args.mode == "final_evaluation":
+        from torch.utils.tensorboard import SummaryWriter
+        from wandb_logging import init_wandb_run, model_run_config
+        from retrieval_runs import close_environments
+
+        run = None
+        try:
+            if args.wandb:
+                config = dict(model_run_config(model), evaluation_only=True, checkpoint=str(args.checkpoint))
+                run = init_wandb_run(args.config.callback_path, project=args.wandb_project,
+                                     entity=args.wandb_entity, config=config)
+            with SummaryWriter(os.path.join(args.config.callback_path, "logs")) as writer:
+                model.evaluate_final_result(args.config.callback_path, args.checkpoint,
+                                            writer, run, args.verbose_progress_bar)
+        finally:
+            close_environments(model)
+            if run is not None:
+                run.finish()
+
     # Pass
     elif args.mode == "pass":
         pass
@@ -112,7 +133,7 @@ if __name__ == "__main__":
     # Args
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config_file",          type=str,   default="configs/twister.py",                                       help="Python configuration file containing model hyperparameters")
-    parser.add_argument("-m", "--mode",                 type=str,   default="training", choices=["training", "evaluation", "pass"],     help="Mode: training, validation-clean, test-clean, eval_time-dev-clean, ...")
+    parser.add_argument("-m", "--mode",                 type=str,   default="training", choices=["training", "evaluation", "final_evaluation", "pass"], help="Train, evaluate, or run the configured final evaluation without training")
     parser.add_argument("-i", "--checkpoint",           type=str,   default=None,                                                       help="Load model from checkpoint name")
     parser.add_argument("--cpu",                        action="store_true",                                                            help="Load model on cpu")
     parser.add_argument("--load_last",                  action="store_true",                                                            help="Load last model checkpoint")
@@ -150,6 +171,12 @@ if __name__ == "__main__":
     
     # Parse Args
     args = parser.parse_args()
+    if args.mode == "final_evaluation" and (args.checkpoint is None or args.load_last):
+        parser.error("final_evaluation requires --checkpoint without --load_last")
 
     # Run main
-    main(args)
+    try:
+        main(args)
+    except WarmupBoundaryUnavailable as error:
+        print(f"Shared warmup unavailable: {error}", file=sys.stderr, flush=True)
+        raise SystemExit(WARMUP_UNAVAILABLE_EXIT_CODE)

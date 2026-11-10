@@ -221,6 +221,24 @@ including a partial first epoch when needed. The warmup is not repeated. If the
 training budget ends before all environments finish, no branches are launched.
 These runs require `load_replay_buffer_state_dict=true` and `accumulated_steps=1`.
 
+The reproduction worker handles an unavailable shared boundary by running ON
+from scratch, then obtaining OFF's score only if ON passes its score gate.
+A warmup that consumed exactly the full training budget without paused environments
+or resumed collection is already an OFF-trained model. It exports
+`baseline_candidate.json` and receives final evaluation with no additional training.
+If the warmup is incomplete or its collection was paused/resumed, OFF trains from
+scratch with the original seed and full budget. A shared-warmup resume past the
+decision target is also rejected: its fresh simulator histories must not be
+mistaken for natural episode endings. The entry point uses exit code 75 for
+this specific condition; unrelated training failures do not trigger retries
+from scratch. Direct `main.py` callers receive that exit code and diagnostic;
+automatic recovery is provided by `reproduce.py` / `N_train.sh`.
+
+`main.py --mode final_evaluation --checkpoint PATH` loads only model weights and
+counters, then runs the configured final evaluation and writes `final_evaluation.json`.
+It loads no replay/optimizer/resume state and performs no training or checkpoint rewrite.
+Use `retrieval_enabled=false` to evaluate a completed warmup as baseline.
+
 Shared replay trajectory files are referenced from the warmup directory; each
 branch writes new trajectories to its own directory. Keep the warmup directory
 available when resuming branch checkpoints. Replay source files are recorded by

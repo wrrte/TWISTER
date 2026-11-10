@@ -109,6 +109,18 @@ saved with the search settings. A game leaves the search after four qualifying
 full FLASH seeds and their completed baselines. Baseline score does not affect
 qualification or ranking.
 
+If shared warmup cannot reach completed episode boundaries before the training
+budget ends, the worker trains full FLASH from step zero with the same seed.
+Only if that result passes the usual gate does it obtain baseline's final score.
+A full-budget warmup that never paused an environment or resumed collection is
+already a retrieval-OFF agent: its checkpoint is evaluated without more training.
+If that condition cannot be verified, baseline trains from step zero with the
+same seed and full budget. Resuming a warmup checkpoint
+past the warmup target also takes this path: resetting its unsaved simulators
+does not count as completing their episodes. The state records `warmup_fallback`;
+both outputs still belong to one trial and follow the same top-four policy.
+Other training errors stop the worker as before.
+
 Keep only the **four highest full FLASH scores per game**, even when all four
 are below the qualification threshold. Keep all trials until four scored trials
 exist. After a fifth finishes full FLASH evaluation, prune the lower scoring
@@ -140,6 +152,12 @@ warmup and evaluations are reused; an incomplete ON/OFF branch restarts from the
 saved shared warmup. A training error stops that worker and leaves a retryable
 trial, rather than counting it as a low score. No GPU training starts during
 `--status`. Set `TWISTER_PYTHON` to select a Python executable explicitly.
+An incomplete independent fallback branch restarts from step zero, preserving
+the old attempt under `unfinished_<branch>_<id>/` inside its trial. Completed
+evaluations are reused. A reused warmup baseline only repeats evaluation if
+interrupted. Its checkpoint is hard-linked into the baseline directory and
+`training_source.json` records its origin. No rolling pre-warmup snapshot is maintained; see the
+[measured recovery costs](reproduction/warmup_fallback_cost.md).
 
 Offline control-flow/retention tests: `python -m unittest discover -s validation -v`.
 

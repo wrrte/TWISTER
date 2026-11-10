@@ -257,6 +257,12 @@ def stop_child(process):
         process.wait()
 
 
+class TrainingProcessError(RuntimeError):
+    def __init__(self, code, logfile):
+        self.code = code
+        super().__init__(f"Training exited with {code}; see {logfile}")
+
+
 def run_command(command, environment, lease, logfile):
     print(f"Running {' '.join(command)}\nLog: {logfile}", flush=True)
     with logfile.open("a", encoding="utf-8") as stream:
@@ -269,7 +275,7 @@ def run_command(command, environment, lease, logfile):
             # Reap environment processes even after the training leader exits.
             stop_child(process)
     if code:
-        raise RuntimeError(f"Training exited with {code}; see {logfile}")
+        raise TrainingProcessError(code, logfile)
 
 
 def read_evaluation(path, state, trial, enabled):
@@ -286,8 +292,76 @@ def read_evaluation(path, state, trial, enabled):
     return result
 
 
+def run_independent_branch(campaign, state, trial, lease, enabled, environment):
+    """Train from step zero, without resetting an episode to create a fork."""
+    directory, run_name, paths = trial_paths(state, trial)
+    branch = "full_flash" if enabled else "baseline"
+    path = paths[branch]
+    if path.exists():
+        if path.is_symlink() or path.resolve() != path:
+            raise ValueError(f"Refusing to replace a symlink branch: {path}")
+        # A fresh run must not mix replay/checkpoints with a previous, partial
+        # attempt. Keep that attempt inside this trial for normal top-4 cleanup.
+        archive = directory / ("unfinished_" + branch + "_" + uuid.uuid4().hex)
+        path.rename(archive)
+        history = list(trial.get("independent_archives", [])) + [str(archive)]
+        trial = campaign.update(trial, independent_archives=history)
+    override = dict(state["config"]["override_config"], retrieval_enabled=enabled)
+    environment = dict(environment, run_name=run_name + ("_O" if enabled else "_X"),
+                       override_config=json.dumps(override))
+    command = [state["config"]["python"], "-u", str(ROOT / "main.py"),
+               "--seed", str(trial["seed"])]
+    if state["config"]["no_wandb"]:
+        command.append("--no-wandb")
+    print(f"{trial['game']} seed {trial['seed']}: {branch} starts from step zero "
+          "because no usable shared warmup exists.", flush=True)
+    run_command(command, environment, lease, directory / (branch + ".log"))
+
+
+def validate_baseline_candidate(candidate, state, trial):
+    checkpoint = Path(candidate["checkpoint"])
+    override = state["config"]["override_config"]
+    budget = override.get("epochs", 50) * override.get("epoch_length", 2000)
+    if (candidate.get("version") != 1 or candidate.get("env_name") != "atari100k-" + trial["game"]
+            or candidate.get("seed") != trial["seed"] or candidate.get("model_step") != budget
+            or candidate.get("training_budget") != budget or candidate.get("uninterrupted") is not True
+            or candidate.get("paused_environments") != 0 or checkpoint.resolve() != checkpoint
+            or not checkpoint.is_relative_to(artifact_dir(state, trial)) or not checkpoint.is_file()):
+        raise ValueError("Completed warmup is not a compatible full-budget baseline")
+    return checkpoint
+
+
+def evaluate_warmup_baseline(state, trial, lease, environment):
+    """Evaluate existing baseline weights; perform no optimizer updates."""
+    directory, run_name, paths = trial_paths(state, trial)
+    candidate = trial["warmup_fallback"]["baseline_candidate"]
+    source = validate_baseline_candidate(candidate, state, trial)
+    output = paths["baseline"]
+    if output.is_symlink() or output.resolve() != output:
+        raise ValueError(f"Refusing to evaluate in a symlink branch: {output}")
+    output.mkdir(parents=True, exist_ok=True)
+    checkpoint = output / source.name
+    if checkpoint.exists():
+        if not checkpoint.samefile(source):
+            raise ValueError(f"Baseline checkpoint does not match the completed warmup: {checkpoint}")
+    else:
+        # Both live inside one trial on the same filesystem. Keep the original
+        # immutable weights without another 0.5-GiB copy or checkpoint rewrite.
+        os.link(source, checkpoint)
+    write_json(output / "training_source.json", candidate)
+    override = dict(state["config"]["override_config"], retrieval_enabled=False)
+    environment = dict(environment, run_name=run_name + "_X", override_config=json.dumps(override))
+    command = [state["config"]["python"], "-u", str(ROOT / "main.py"),
+               "--seed", str(trial["seed"]), "--mode", "final_evaluation", "--checkpoint", str(checkpoint)]
+    if state["config"]["no_wandb"]:
+        command.append("--no-wandb")
+    print(f"{trial['game']} seed {trial['seed']}: evaluating the completed warmup as baseline; "
+          "no baseline training is needed.", flush=True)
+    run_command(command, environment, lease, directory / "baseline.log")
+
+
 def run_trial(campaign, state, trial, lease):
-    from retrieval_runs import branch_commands
+    from retrieval_runs import branch_commands, WARMUP_UNAVAILABLE_EXIT_CODE
 
     directory, run_name, paths = trial_paths(state, trial)
     shared = paths["warmup"] / "shared_warmup"
@@ -301,24 +375,39 @@ def run_trial(campaign, state, trial, lease):
         if marker.exists() and json.loads(marker.read_text()) != identity(state, trial):
             raise ValueError(f"Trial ownership mismatch: {directory}")
         write_json(marker, identity(state, trial))
-        if not (shared / "run.json").is_file():
+        if not trial.get("warmup_fallback") and not (shared / "run.json").is_file():
             campaign.update(trial, stage="warmup")
             command = [python, "-u", str(ROOT / "main.py"), "--seed", str(trial["seed"]),
                        "--warmup_only", "--load_last"]
             if state["config"]["no_wandb"]:
                 command.append("--no-wandb")
-            run_command(command, environment, lease, directory / "warmup.log")
-        plan = json.loads((shared / "run.json").read_text(encoding="utf-8"))
-        if (plan["env_name"] != environment["env_name"] or plan["run_name"] != run_name
-                or plan["override_config"].get("seed") != trial["seed"]
-                or not (shared / plan["checkpoint"]).is_file()):
-            raise ValueError(f"Shared warmup identity/checkpoint mismatch: {shared}")
+            try:
+                run_command(command, environment, lease, directory / "warmup.log")
+            except TrainingProcessError as error:
+                if error.code != WARMUP_UNAVAILABLE_EXIT_CODE:
+                    raise
+                fallback = dict(mode="independent", reason=str(error), time=time.time())
+                candidate_file = paths["warmup"] / "baseline_candidate.json"
+                if candidate_file.is_file():
+                    candidate = json.loads(candidate_file.read_text())
+                    validate_baseline_candidate(candidate, state, trial)
+                    fallback["baseline_candidate"] = candidate
+                trial = campaign.update(trial, warmup_fallback=fallback)
+        if not trial.get("warmup_fallback"):
+            plan = json.loads((shared / "run.json").read_text(encoding="utf-8"))
+            if (plan["env_name"] != environment["env_name"] or plan["run_name"] != run_name
+                    or plan["override_config"].get("seed") != trial["seed"]
+                    or not (shared / plan["checkpoint"]).is_file()):
+                raise ValueError(f"Shared warmup identity/checkpoint mismatch: {shared}")
         campaign.update(trial, stage="full_flash")
         result_path = paths["full_flash"] / "final_evaluation.json"
         if not result_path.is_file():
-            command, _ = branch_commands(shared)
-            command[0] = python
-            run_command(command, environment, lease, directory / "full_flash.log")
+            if trial.get("warmup_fallback"):
+                run_independent_branch(campaign, state, trial, lease, True, environment)
+            else:
+                command, _ = branch_commands(shared)
+                command[0] = python
+                run_command(command, environment, lease, directory / "full_flash.log")
         result = read_evaluation(result_path, state, trial, True)
         comparison = compare_score(result["metrics"]["score"], state["config"]["references"][trial["game"]])
         comparison["evaluation"] = result
@@ -329,9 +418,14 @@ def run_trial(campaign, state, trial, lease):
         campaign.update(trial, stage="baseline")
         result_path = paths["baseline"] / "final_evaluation.json"
         if not result_path.is_file():
-            _, command = branch_commands(shared)
-            command[0] = python
-            run_command(command, environment, lease, directory / "baseline.log")
+            if trial.get("warmup_fallback", {}).get("baseline_candidate"):
+                evaluate_warmup_baseline(state, trial, lease, environment)
+            elif trial.get("warmup_fallback"):
+                run_independent_branch(campaign, state, trial, lease, False, environment)
+            else:
+                _, command = branch_commands(shared)
+                command[0] = python
+                run_command(command, environment, lease, directory / "baseline.log")
         result = read_evaluation(result_path, state, trial, False)
         trial = campaign.update(trial, baseline=result)
     campaign.update(trial, stage="done", status="complete", error=None)

@@ -434,14 +434,20 @@ class TWISTER(models.Model):
                 # Print
                 print("Removed old checkpoint {}".format(older_checkpoint))
 
-    def load(self, path, load_optimizer=True, verbose=True, strict=True):
+    def load(self, path, load_optimizer=True, verbose=True, strict=True, evaluation_only=False):
 
         # Print Load state
         if verbose:
             print("Load Model from {}".format(path))
 
         # Load Model Checkpoint
-        checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+        checkpoint = torch.load(path, map_location="cpu" if evaluation_only else self.device, weights_only=False)
+        if evaluation_only:
+            self.load_state_dict(checkpoint["model_state_dict"], strict=strict)
+            self.model_step.fill_(checkpoint["model_step"])
+            if verbose:
+                print("Model loaded for final evaluation at step {}".format(self.model_step))
+            return
         if checkpoint.get("retrieval_run_state") is not None and not self.config.load_replay_buffer_state_dict:
             raise ValueError("Resuming a TWISTER retrieval run requires load_replay_buffer_state_dict=True")
 
@@ -564,7 +570,10 @@ class TWISTER(models.Model):
             self.save(checkpoint, keep_last_k=keep_last_k)
         if not self.config.final_eval_enabled:
             return
+        self.evaluate_final_result(callback_path, checkpoint, writer, wandb_run, verbose_progress_bar)
 
+    def evaluate_final_result(self, callback_path, checkpoint, writer=None, wandb_run=None, verbose_progress_bar=1):
+        """Evaluate final weights without training or rewriting their checkpoint."""
         from .twister_evaluation import evaluate_final
         losses, metrics = evaluate_final(self, verbose_progress_bar)
         from run_results import save_final_evaluation

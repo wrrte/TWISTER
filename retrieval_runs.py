@@ -10,6 +10,13 @@ from training_branches import launch_training_branches
 from configuration import load_run_config, set_run_config, validate_seed
 
 
+WARMUP_UNAVAILABLE_EXIT_CODE = 75
+
+
+class WarmupBoundaryUnavailable(RuntimeError):
+    """No shared episode boundary can be used within the training budget."""
+
+
 class SharedWarmupComplete(BaseException):
     """A successful training boundary, deliberately not a training error."""
 
@@ -107,8 +114,12 @@ def fit_retrieval_run(model, args, fit_kwargs):
     try:
         model.fit(**fit_kwargs)
         if run.shared:
-            raise RuntimeError("Training budget ended before all warmup episodes finished; "
-                               "increase epochs or lower retrieval.warmup_steps. No branches were launched.")
+            if not run.target_reached:
+                raise ValueError("The warmup decision target exceeds the available training budget")
+            run.export_baseline_candidate()
+            raise WarmupBoundaryUnavailable(
+                "Training budget ended before all warmup episodes finished. "
+                "Run retrieval ON from the initial seed; a compatible completed warmup can serve as OFF.")
     except SharedWarmupComplete as event:
         completed = event.directory
     finally:

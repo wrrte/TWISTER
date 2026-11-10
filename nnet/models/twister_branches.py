@@ -5,9 +5,10 @@ from pathlib import Path
 
 import numpy as np
 
-from retrieval_runs import SharedWarmupComplete
+from retrieval_runs import SharedWarmupComplete, WarmupBoundaryUnavailable
 from training_branches import capture_rng_state, restore_rng_state
 from seeding import seed_environment
+from run_results import write_json
 
 
 class TWISTERRetrievalRun:
@@ -19,6 +20,8 @@ class TWISTERRetrievalRun:
         self.reset_seed = None
         self.callback_path = None
         self.plan = None
+        self.was_resumed = False
+        self.loaded_baseline_compatible = False
 
     def configure(self, callback_path, plan=None):
         self.callback_path = Path(callback_path)
@@ -52,13 +55,16 @@ class TWISTERRetrievalRun:
 
     def state_dict(self):
         return dict(version=1, num_envs=self.model.config.num_envs,
-                    rng=capture_rng_state(), reset_seed=self.reset_seed)
+                    rng=capture_rng_state(), reset_seed=self.reset_seed,
+                    baseline_compatible=self.shared and not self.was_resumed and not any(self.paused))
 
     def load_state_dict(self, state):
         if state.get("version") != 1 or state["num_envs"] != self.model.config.num_envs:
             raise ValueError("TWISTER retrieval-run resume requires matching version and num_envs")
         self.resume_rng = state["rng"]
         self.reset_seed = state["reset_seed"]
+        self.was_resumed = True
+        self.loaded_baseline_compatible = state.get("baseline_compatible") is True
         # Simulator state is not saved. Every resumed environment starts fresh.
         self.paused = [False] * self.model.config.num_envs
 
@@ -72,6 +78,14 @@ class TWISTERRetrievalRun:
 
     def on_train_begin(self):
         if self.resume_rng is not None:
+            if self.shared and self.target_reached:
+                # A periodic checkpoint does not save live simulator state.
+                # Resetting it would make unfinished episodes look like valid
+                # shared boundaries merely because their histories start fresh.
+                self.export_baseline_candidate(from_checkpoint=True)
+                raise WarmupBoundaryUnavailable(
+                    "Cannot resume a shared warmup past its decision target without simulator state; "
+                    "a reset is not a completed episode boundary.")
             restore_rng_state(self.resume_rng)
             self.resume_rng = None
             if self.reset_seed is None:
@@ -88,6 +102,27 @@ class TWISTERRetrievalRun:
         remaining = length - int(self.model.model_step) % length
         self.model.replay_buffer.epoch_length = remaining
 
+    def export_baseline_candidate(self, from_checkpoint=False):
+        """Retain full-budget warmup weights if collection never paused/reset."""
+        model = self.model
+        budget = model.config.epochs * model.config.epoch_length
+        compatible = (self.loaded_baseline_compatible if from_checkpoint else
+                      not self.was_resumed and not any(self.paused))
+        if not self.shared or not compatible or int(model.model_step) != budget:
+            return None
+        if self.callback_path is None:
+            raise ValueError("Warmup checkpoint export requires a configured callback path")
+        checkpoint = self.callback_path / f"checkpoints_epoch_{model.config.epochs}_step_{budget}.ckpt"
+        if not checkpoint.is_file():
+            model.save(str(checkpoint))
+        candidate = dict(version=1, checkpoint=str(checkpoint.resolve()),
+                         env_name="-".join(model.config.env_name), seed=model.config.seed,
+                         model_step=int(model.model_step), training_budget=budget,
+                         action_step=int(model.action_step), paused_environments=0,
+                         uninterrupted=True)
+        write_json(self.callback_path / "baseline_candidate.json", candidate)
+        return candidate
+
     def maybe_split(self):
         if not self.shared or any(self.active_environments()):
             return
@@ -95,7 +130,7 @@ class TWISTERRetrievalRun:
             raise ValueError("Shared warmup must be configured by the training entry point")
         model = self.model
         if int(model.model_step) >= model.config.epochs * model.config.epoch_length:
-            raise RuntimeError("No training budget remains after shared warmup; no branches were launched")
+            raise WarmupBoundaryUnavailable("No training budget remains after shared warmup")
         directory = self.callback_path / "shared_warmup"
         directory.mkdir(parents=True, exist_ok=True)
         self.reset_seed = int(np.random.randint(1, 2 ** 31 - 1))

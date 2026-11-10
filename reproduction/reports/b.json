@@ -2,17 +2,17 @@
   "version": 1,
   "server": "b",
   "search_id": "search_55ef5d85540b44deb4e3af0ae3b0ecc8",
-  "round": 1,
-  "updated_at": "2026-11-09T07:20:21+00:00",
+  "round": 2,
+  "updated_at": "2026-11-10T05:39:16+00:00",
   "games": {
     "frostbite": {
-      "attempts": 1,
+      "attempts": 2,
       "completed": 1,
       "successful_pairs": 1,
       "latest": {
-        "seed": 3090,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3100,
+        "status": "running",
+        "stage": "full_flash"
       },
       "top": [
         {
@@ -24,13 +24,13 @@
       ]
     },
     "gopher": {
-      "attempts": 1,
+      "attempts": 2,
       "completed": 1,
       "successful_pairs": 0,
       "latest": {
-        "seed": 3090,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3100,
+        "status": "running",
+        "stage": "full_flash"
       },
       "top": [
         {
@@ -42,13 +42,13 @@
       ]
     },
     "hero": {
-      "attempts": 1,
+      "attempts": 2,
       "completed": 1,
       "successful_pairs": 1,
       "latest": {
-        "seed": 3090,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3100,
+        "status": "running",
+        "stage": "full_flash"
       },
       "top": [
         {
@@ -60,13 +60,13 @@
       ]
     },
     "jamesbond": {
-      "attempts": 1,
+      "attempts": 2,
       "completed": 1,
       "successful_pairs": 1,
       "latest": {
-        "seed": 3090,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3100,
+        "status": "running",
+        "stage": "warmup"
       },
       "top": [
         {
@@ -133,61 +133,93 @@
     },
     "ms_pacman": {
       "attempts": 1,
-      "completed": 0,
-      "successful_pairs": 0,
+      "completed": 1,
+      "successful_pairs": 1,
       "latest": {
         "seed": 3090,
-        "status": "running",
-        "stage": "baseline"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
           "seed": 3090,
           "score": 2161.5,
           "delta_hns": -0.006696764484574868,
-          "baseline_complete": false
+          "baseline_complete": true
         }
       ]
     },
     "pong": {
       "attempts": 1,
-      "completed": 0,
-      "successful_pairs": 0,
+      "completed": 1,
+      "successful_pairs": 1,
       "latest": {
         "seed": 3090,
-        "status": "running",
-        "stage": "full_flash"
+        "status": "complete",
+        "stage": "done"
       },
-      "top": []
+      "top": [
+        {
+          "seed": 3090,
+          "score": 20.89,
+          "delta_hns": 0.02472222222222224,
+          "baseline_complete": true
+        }
+      ]
     },
     "private_eye": {
       "attempts": 1,
-      "completed": 0,
-      "successful_pairs": 0,
+      "completed": 1,
+      "successful_pairs": 1,
       "latest": {
         "seed": 3090,
-        "status": "running",
-        "stage": "warmup"
+        "status": "complete",
+        "stage": "done"
       },
-      "top": []
+      "top": [
+        {
+          "seed": 3090,
+          "score": 100.0,
+          "delta_hns": -0.021683490064130215,
+          "baseline_complete": true
+        }
+      ]
     },
     "qbert": {
       "attempts": 1,
-      "completed": 0,
-      "successful_pairs": 0,
+      "completed": 1,
+      "successful_pairs": 1,
       "latest": {
         "seed": 3090,
-        "status": "running",
-        "stage": "warmup"
+        "status": "complete",
+        "stage": "done"
       },
-      "top": []
+      "top": [
+        {
+          "seed": 3090,
+          "score": 3650.0,
+          "delta_hns": 0.034083214205101194,
+          "baseline_complete": true
+        }
+      ]
     },
     "freeway": {
-      "attempts": 0,
-      "completed": 0,
-      "successful_pairs": 0,
-      "latest": null,
-      "top": []
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 1,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 31.9,
+          "delta_hns": -0.003333333333333381,
+          "baseline_complete": true
+        }
+      ]
     }
   }
 }

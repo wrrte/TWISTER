@@ -178,3 +178,55 @@ env_name=atari100k-road_runner override_config='{"retrieval_enabled":false}' pyt
 ```bash
 python -m unittest discover -s results -p 'test_*.py'
 ```
+
+## 논문의 main performance 표 갱신
+
+TWISTER 루트에서 최신 CSV를 만든 뒤 실행합니다. TeX 갱신 자체는 W&B에 접속하지
+않으며, CSV·Excel 파일이나 논문의 본문·다른 표·다른 방법의 점수를 수정하지 않습니다.
+
+```bash
+python results/classify_wandb_runs.py --xlsx
+python results/update_tex.py
+
+# 파일을 수정하지 않고 공통 시드와 하단 지표 확인
+python results/update_tex.py --dry-run
+
+# 입력 경로와 보정 파일 지정
+python results/update_tex.py --csv results/wandb_runs_classification.csv \
+    --tex ../iclr2027_conference.tex --run-overrides results/run_overrides.json
+```
+
+기본 대상은 `../iclr2027_conference.tex`의 `tab:main_performance`입니다.
+이미 추가된 `TWISTER`, `TWISTER+ours`, `$\Delta$` 세 열의 데이터 셀만 수정합니다.
+제목·열 배치·Random/Human·STORM·DRAMA 열과 다른 표는 그대로 보존합니다.
+기존 STORM·DRAMA 갱신기도 이 세 열이 추가된 배치를 허용하도록 열 검사만
+확장했습니다. 각 갱신기는 자기 방법의 세 열만 갱신합니다.
+
+점수는 Excel의 **Mean (공통 시드)**와 같은 방식으로 집계합니다.
+
+- 보정 파일을 먼저 적용하고, 완료된 `finished` run의 유한한 최종 점수만 사용합니다.
+  실행 중·실패·warmup·점수 누락·시드 미확인 run은 사용하지 않습니다.
+- 같은 게임·설정·시드의 중복 run은 먼저 평균합니다. 그다음 OFF와 모든 ON 설정에
+  공통으로 존재하는 시드만 골라 평균합니다. baseline만 있는 게임은 사용하지 않습니다.
+- ON 설정이 여러 종류이면 `--on-config 'CSV의 정확한 Config 문자열'`로 표에 넣을
+  설정을 지정합니다. 공통 시드는 Excel과 마찬가지로 모든 ON 설정과 교집합을 취합니다.
+- 공통 시드 쌍이 없는 게임은 `-`로 표시하고 집계에서 제외합니다. 기존 숫자를
+  남겨 두거나 누락을 0점으로 계산하지 않습니다. 게임·시드의 현재 포함 범위를 출력합니다.
+
+HNS에는 **논문 표에 있는** Random/Human 값을 사용합니다. Excel의 참고용 정수
+Random/Human 값으로 기존 표를 덮어쓰지 않습니다. 각 시드의 점수를 $A_{g,s}$라 할 때
+$h_{g,s}=(A_{g,s}-R_g)/(H_g-R_g)$, 게임별 평균을 $\bar h_g$로 놓고 다음을 계산합니다.
+
+| 하단 지표 | 계산식 |
+| --- | --- |
+| #Superhuman | $\sum_g \mathbf{1}[\bar h_g>1]$ |
+| Mean | $\operatorname{mean}_g \bar h_g$ |
+| Median | $\operatorname{median}_g \bar h_g$ |
+| IQM | 공통 시드의 $h_{g,s}$를 모두 모아 정렬한 뒤 양쪽에서 $\lfloor N/4\rfloor$개씩 제외한 평균. 기존 STORM 갱신기와 같은 trimming 방식입니다. |
+| Optimality Gap | $\operatorname{mean}_g\max(0,1-\bar h_g)$ |
+
+Mean·Median·Optimality Gap은 게임마다 같은 가중치를 주며, IQM은 시드별 HNS를
+pooling하므로 시드 쌍이 많은 게임이 더 많은 관측치를 제공합니다. 계산에는 표시용으로
+반올림하기 전 값을 사용합니다. 게임 점수는 소수점 한 자리까지, 하단 HNS 지표는
+세 자리까지 표시합니다. $\Delta$는 표시된 ON−OFF를 정확히 빼서 계산하며, Optimality
+Gap은 감소가 개선이고 나머지는 증가가 개선입니다.

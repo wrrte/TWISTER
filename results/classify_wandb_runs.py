@@ -3,6 +3,7 @@
 
 import argparse
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import csv
 import json
 import math
@@ -248,6 +249,30 @@ def classify_run(run, history_fallback=True, config_overrides=None):
     return {key: "N/A" if value is None else value for key, value in row.items()}
 
 
+def classify_runs(runs, workers=100, history_fallback=True, run_overrides=None):
+    """Fetch run details concurrently, retaining the input order in the CSV."""
+    if workers < 1:
+        raise ValueError("workers must be at least 1")
+    overrides_by_id = run_overrides or {}
+    rows = {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        # Only this thread iterates W&B's paginator; each worker owns one run.
+        futures = {
+            executor.submit(
+                classify_run, run, history_fallback=history_fallback,
+                config_overrides=overrides_by_id.get(run.id, overrides_by_id.get(run.name)),
+            ): index
+            for index, run in enumerate(runs)
+        }
+        total = len(futures)
+        for completed, future in enumerate(as_completed(futures), 1):
+            row = future.result()
+            rows[futures[future]] = row
+            print(f"[{completed}/{total}] {row['Run Name']}: {row[SCORE_KEY]} "
+                  f"({row['Score Status']}, {row['State']})", flush=True)
+    return [rows[index] for index in range(total)]
+
+
 def write_csv(rows, output):
     output = Path(output).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -283,7 +308,11 @@ def main(argv=None):
     parser.add_argument("--run-overrides", type=Path,
                         help="Run-ID/name config and score corrections; defaults to results/run_overrides.json")
     parser.add_argument("--timeout", type=int, default=30)
+    parser.add_argument("--workers", type=int, default=100,
+                        help="Concurrent run lookups (default: 100; use 1 for sequential processing)")
     args = parser.parse_args(argv)
+    if args.workers < 1:
+        parser.error("--workers must be at least 1")
     try:
         import wandb
         if not hasattr(wandb, "Api"):
@@ -303,14 +332,12 @@ def main(argv=None):
             filters["state"] = {"$in": args.states}
         if args.run_id:
             filters["name"] = {"$in": args.run_id}
-        print(f"Reading {project} ({SCORE_KEY})", flush=True)
-        rows = []
-        for run in api.runs(project, filters=filters, order="+created_at", per_page=100):
-            row = classify_run(run, history_fallback=not args.no_history_fallback,
-                               config_overrides=overrides_by_id.get(run.id, overrides_by_id.get(run.name)))
-            rows.append(row)
-            print(f"[{len(rows)}] {row['Run Name']}: {row[SCORE_KEY]} "
-                  f"({row['Score Status']}, {row['State']})", flush=True)
+        print(f"Reading {project} ({SCORE_KEY}); up to {args.workers} workers", flush=True)
+        rows = classify_runs(
+            api.runs(project, filters=filters, order="+created_at", per_page=100),
+            workers=args.workers, history_fallback=not args.no_history_fallback,
+            run_overrides=overrides_by_id,
+        )
         if not rows:
             raise ValueError("No matching runs. Check entity/project, --run-id and --name-regex.")
         output = write_csv(rows, args.output)

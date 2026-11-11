@@ -3,7 +3,7 @@
   "server": "a",
   "search_id": "search_2adad0c4cf444365b65e08b887d07bed",
   "round": 2,
-  "updated_at": "2026-11-11T02:12:17+00:00",
+  "updated_at": "2026-11-11T07:48:03+00:00",
   "games": {
     "alien": {
       "attempts": 2,
@@ -12,9 +12,15 @@
       "latest": {
         "seed": 3100,
         "status": "running",
-        "stage": "full_flash"
+        "stage": "baseline"
       },
       "top": [
+        {
+          "seed": 3100,
+          "score": 1452.1,
+          "delta_hns": 0.0698695652173913,
+          "baseline_complete": false
+        },
         {
           "seed": 3090,
           "score": 881.1,
@@ -47,7 +53,7 @@
       "successful_pairs": 1,
       "latest": {
         "seed": 3100,
-        "status": "interrupted",
+        "status": "running",
         "stage": "full_flash"
       },
       "top": [
@@ -85,12 +91,12 @@
     },
     "bank_heist": {
       "attempts": 2,
-      "completed": 1,
-      "successful_pairs": 1,
+      "completed": 2,
+      "successful_pairs": 2,
       "latest": {
         "seed": 3100,
-        "status": "running",
-        "stage": "baseline"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
@@ -103,7 +109,7 @@
           "seed": 3100,
           "score": 965.1,
           "delta_hns": 0.031258457374830885,
-          "baseline_complete": false
+          "baseline_complete": true
         }
       ]
     },
@@ -210,9 +216,16 @@
       "latest": {
         "seed": 3090,
         "status": "running",
-        "stage": "full_flash"
+        "stage": "baseline"
       },
-      "top": []
+      "top": [
+        {
+          "seed": 3090,
+          "score": 280.35,
+          "delta_hns": -0.004755360087960406,
+          "baseline_complete": false
+        }
+      ]
     }
   }
 }

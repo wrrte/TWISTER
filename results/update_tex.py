@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Update only the TWISTER cells in tab:main_performance from paired CSV scores."""
+"""Update only the TWISTER cells in tab:main_performance from CSV scores."""
 
 import argparse
 from collections import defaultdict
@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 from classify_wandb_runs import SCORE_KEY, apply_run_overrides, load_run_overrides, number
-from convert_csv_to_excel import comparison_metrics
+from convert_csv_to_excel import comparison_metrics, comparison_seeds
 
 
 HERE = Path(__file__).resolve().parent
@@ -26,14 +26,15 @@ def game_key(name):
 
 
 @dataclass(frozen=True)
-class PairedScores:
-    seeds: tuple
+class ComparisonScores:
+    baseline_seeds: tuple
+    enabled_seeds: tuple
     baseline: tuple
     enabled: tuple
 
 
-def load_results(csv_path, run_overrides_path=None, on_config=None):
-    """Use exactly Excel's per-seed duplicate means and all-ON common seeds."""
+def load_results(csv_path, run_overrides_path=None, on_config=None, all_seed=False):
+    """Use Excel's duplicate means and shared/balanced seed selection."""
     with Path(csv_path).open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
         required = {"Environment", "Game", "Seed", "Config", "State", "Retrieval Enable", SCORE_KEY}
@@ -82,23 +83,23 @@ def load_results(csv_path, run_overrides_path=None, on_config=None):
         if len(baselines) != 1:
             raise ValueError(f"{game}: expected one Retrieval OFF configuration")
         baseline = baselines[0]
-        shared = set(baseline["scores"])
-        for record in enabled:
-            shared.intersection_update(record["scores"])
-        seeds = tuple(sorted(shared, key=int))
+        seeds, _ = comparison_seeds(records, all_seed)
         if not seeds:
             continue
-        paired = PairedScores(seeds, tuple(baseline["scores"][seed] for seed in seeds),
-                              tuple(ours["scores"][seed] for seed in seeds))
-        # Keep the paired means tied to the existing Excel implementation.
-        excel_means, _, _ = comparison_metrics(records, reference=None)
-        if (mean(paired.baseline) != excel_means[baseline["config"]][0]
-                or mean(paired.enabled) != excel_means[ours["config"]][0]):
-            raise ValueError(f"{game}: paired means disagree with Excel")
+        baseline_seeds, enabled_seeds = seeds[baseline["config"]], seeds[ours["config"]]
+        scores = ComparisonScores(
+            baseline_seeds, enabled_seeds,
+            tuple(baseline["scores"][seed] for seed in baseline_seeds),
+            tuple(ours["scores"][seed] for seed in enabled_seeds))
+        # Keep both modes tied to Excel's comparison means.
+        excel_means, _, _ = comparison_metrics(records, reference=None, all_seed=all_seed)
+        if (mean(scores.baseline) != excel_means[baseline["config"]][0]
+                or mean(scores.enabled) != excel_means[ours["config"]][0]):
+            raise ValueError(f"{game}: comparison means disagree with Excel")
         key = game_key(game)
         if key != game_key(environment.split("-", 1)[1]) or key in results:
             raise ValueError(f"Ambiguous game/environment identity: {environment}, {game}")
-        results[key] = paired
+        results[key] = scores
     return results
 
 
@@ -107,8 +108,8 @@ def metric_name(label):
     return next((name for name in METRICS if label == name or label.startswith(name + " (")), None)
 
 
-def main_table_rows(lines):
-    """Locate one main table and validate its existing TWISTER column group."""
+def main_table(lines, allow_missing_twister=False):
+    """Locate and validate the main table, optionally before adding TWISTER."""
     labels = [index for index, line in enumerate(lines)
               if not line.lstrip().startswith("%") and r"\label{tab:main_performance}" in line]
     if len(labels) != 1:
@@ -130,9 +131,16 @@ def main_table_rows(lines):
             if header is not None or not separator:
                 raise ValueError("Malformed or duplicate main performance header")
             header = [part.strip() for part in parts]
-            if (header[:3] != ["Game", "Random", "Human"] or header.count("TWISTER") != 1
-                    or header[-3:] != ["TWISTER", "TWISTER+ours", r"$\Delta$"]):
-                raise ValueError("Expected an existing TWISTER / TWISTER+ours / $\\Delta$ column group")
+            header_index = index
+            if header[:3] != ["Game", "Random", "Human"]:
+                raise ValueError("Expected Game / Random / Human as the first three columns")
+            has_twister = any("TWISTER" in column for column in header)
+            if has_twister:
+                if (header.count("TWISTER") != 1 or header.count("TWISTER+ours") != 1
+                        or header[-3:] != ["TWISTER", "TWISTER+ours", r"$\Delta$"]):
+                    raise ValueError("Expected a complete TWISTER / TWISTER+ours / $\\Delta$ column group at the end")
+            elif not allow_missing_twister:
+                raise ValueError("Expected a TWISTER / TWISTER+ours / $\\Delta$ column group")
         elif header is not None:
             if not separator or len(parts) != len(header):
                 raise ValueError(f"Malformed main performance row at line {index + 1}")
@@ -142,8 +150,39 @@ def main_table_rows(lines):
             names.add(name)
             rows.append((index, parts, separator + tail))
     if header is None or not set(METRICS).issubset(names):
-        raise ValueError("Main performance table must contain TWISTER columns and all five metric rows")
-    return rows
+        raise ValueError("Main performance table must contain a header and all five metric rows")
+    return labels[0], header_index, header, rows
+
+
+def main_table_rows(lines):
+    return main_table(lines)[3]
+
+
+def ensure_twister_columns(lines):
+    """Append the TWISTER group and three tabular columns when absent."""
+    label_index, header_index, header, rows = main_table(lines, allow_missing_twister=True)
+    updated = list(lines)
+    if "TWISTER" in header:
+        return updated
+    tabulars = []
+    for index in range(label_index + 1, header_index):
+        if lines[index].lstrip().startswith("%"):
+            continue
+        match = re.search(r"\\begin\{tabular\}(?:\[[^\]]*\])?\{([lcr| \t]+)\}", lines[index])
+        if match:
+            tabulars.append((index, match))
+    if len(tabulars) != 1:
+        raise ValueError("Adding TWISTER columns requires one tabular with an l/c/r column specification")
+    index, match = tabulars[0]
+    if len(re.findall(r"[lcr]", match[1])) != len(header):
+        raise ValueError("Main performance tabular column count does not match its header")
+    updated[index] = lines[index][:match.end(1)] + "rrr" + lines[index][match.end(1):]
+    append_rows = [(header_index, ("TWISTER", "TWISTER+ours", r"$\Delta$"))]
+    append_rows.extend((index, ("-", "-", "-")) for index, _, _ in rows)
+    for index, values in append_rows:
+        body, separator, tail = lines[index].partition(r"\\")
+        updated[index] = body + "& " + " & ".join(values) + " " + separator + tail
+    return updated
 
 
 def calc_iqm(values):
@@ -154,7 +193,7 @@ def calc_iqm(values):
 
 
 def aggregate_metrics(game_hns, seed_hns):
-    """Game-balanced HNS summaries; IQM uses unrounded, pooled paired seeds."""
+    """Game-balanced HNS summaries; IQM pools unrounded retained seed scores."""
     if not game_hns:
         return dict.fromkeys(METRICS)
     return {
@@ -196,7 +235,8 @@ def format_delta(baseline, enabled, metric=None):
 
 
 def update_table(lines, results):
-    """Replace TWISTER's three cells only; preserve all other bytes/columns."""
+    """Add or update TWISTER's columns while preserving the other cells."""
+    lines = ensure_twister_columns(lines)
     rows = main_table_rows(lines)
     game_hns = [[], []]
     seed_hns = [[], []]
@@ -214,7 +254,7 @@ def update_table(lines, results):
                 game_hns[column].append((mean(scores) - random) / (human - random))
                 seed_hns[column].extend((score - random) / (human - random) for score in scores)
     if set(results) - set(table_games):
-        raise ValueError("CSV paired games absent from main table: " +
+        raise ValueError("CSV comparison games absent from main table: " +
                          ", ".join(sorted(set(results) - set(table_games))))
     metrics = [aggregate_metrics(games, seeds) for games, seeds in zip(game_hns, seed_hns)]
     updated = list(lines)
@@ -236,23 +276,33 @@ def main(argv=None):
     parser.add_argument("--tex", type=Path, default=HERE.parent.parent / "iclr2027_conference.tex")
     parser.add_argument("--run-overrides", type=Path, help="Use the same confirmed corrections as Excel")
     parser.add_argument("--on-config", help="Exact ON config label; needed only when several ON configs exist")
-    parser.add_argument("--dry-run", action="store_true", help="Report paired coverage and metrics without writing TeX")
+    parser.add_argument("--all-seed", action="store_true",
+                        help="Ignore seed IDs; equalize OFF/all ON counts by removing lowest/highest scores alternately")
+    parser.add_argument("--dry-run", action="store_true", help="Report seed coverage and metrics without writing TeX")
     args = parser.parse_args(argv)
     args.tex = args.tex.expanduser().resolve()
     args.csv = args.csv.expanduser().resolve()
     if args.csv.resolve() == args.tex.resolve():
         raise ValueError("TeX output must differ from the input CSV")
-    results = load_results(args.csv, args.run_overrides, args.on_config)
+    print(f"TeX: {args.tex}")
+    results = load_results(args.csv, args.run_overrides, args.on_config, all_seed=args.all_seed)
     original = args.tex.read_bytes()
     lines = original.decode("utf-8").splitlines(keepends=True)
     updated = update_table(lines, results)
-    for key, paired in sorted(results.items()):
-        print(f"{key}: seeds {', '.join(paired.seeds)}; "
-              f"OFF={mean(paired.baseline):.6g}, ON={mean(paired.enabled):.6g}")
+    if args.all_seed:
+        print("--all-seed: equalize OFF/all ON seed counts per game; ignore seed IDs. "
+              "Remove lowest/highest/next-lowest/next-highest scores alternately.")
+    for key, scores in sorted(results.items()):
+        seed_note = (f"OFF seeds {', '.join(scores.baseline_seeds)}; "
+                     f"ON seeds {', '.join(scores.enabled_seeds)}" if args.all_seed else
+                     f"seeds {', '.join(scores.baseline_seeds)}")
+        print(f"{key}: {seed_note}; OFF={mean(scores.baseline):.6g}, ON={mean(scores.enabled):.6g}")
     rows = main_table_rows(updated)
     games = sum(metric_name(parts[0]) is None for _, parts, _ in rows)
-    print(f"Paired coverage: {len(results)}/{games} games, "
-          f"{sum(len(paired.seeds) for paired in results.values())} game/seed pairs. "
+    coverage = "Balanced coverage" if args.all_seed else "Paired coverage"
+    unit = "retained seeds per OFF/ON" if args.all_seed else "game/seed pairs"
+    print(f"{coverage}: {len(results)}/{games} games, "
+          f"{sum(len(scores.baseline_seeds) for scores in results.values())} {unit}. "
           "Missing games are '-' and excluded from aggregates.")
     for _, parts, _ in rows:
         if metric_name(parts[0]):
@@ -275,7 +325,7 @@ def main(argv=None):
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
-        print(f"Updated only the TWISTER columns in {args.tex}.")
+        print(f"Updated the TWISTER columns in {args.tex}.")
     return 0
 
 

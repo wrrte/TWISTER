@@ -44,6 +44,7 @@ REFERENCE_SCORES = {
     "upndown": (533, 11693, 7068),
 }
 PAIRED_MEAN_COLUMN = "Mean (공통 시드)"
+ALL_SEED_MEAN_COLUMN = "Mean (시드 수 맞춤)"
 SCORE_DELTA_COLUMN = "Δ Score (행별 비교)"
 HNS_DELTA_COLUMN = "Δ HNS (행별 비교)"
 METRIC_COLUMNS = [PAIRED_MEAN_COLUMN, SCORE_DELTA_COLUMN, HNS_DELTA_COLUMN]
@@ -54,21 +55,62 @@ def reference_scores(environment, game):
     return REFERENCE_SCORES.get(key) if environment.startswith("atari100k-") else None
 
 
-def comparison_metrics(records, reference):
-    """Compare baseline and ON configurations on the same completed seeds."""
-    metrics = {record["config"]: [None, None, None] for record in records}
-    paper_metrics = [None, None, None]
+def comparison_seeds(records, all_seed=False):
+    """Select shared seeds, or equal counts trimmed low/high/next-low/next-high."""
     baselines = [record for record in records if record["retrieval"] == "false"]
     enabled = [record for record in records if record["retrieval"] == "true"]
     if len(baselines) != 1:
-        return metrics, paper_metrics, "Retrieval OFF baseline이 확인되지 않아 비교하지 않습니다."
+        return {}, "Retrieval OFF baseline이 확인되지 않아 비교하지 않습니다."
     baseline = baselines[0]
+    compared = [baseline, *enabled]
+    if all_seed:
+        count = min(len(record["scores"]) for record in compared)
+        if not count:
+            return {}, "시드 수를 맞춰 비교할 완료 run의 유효 시드가 없습니다."
+        selected = {}
+        details = []
+        for record in compared:
+            # Duplicate runs have already been averaged into one score per seed.
+            ordered = sorted(record["scores"], key=lambda seed: (
+                record["scores"][seed], int(seed), seed))
+            low, high = 0, len(ordered)
+            removed = []
+            while high - low > count:
+                if len(removed) % 2 == 0:
+                    removed.append(ordered[low])
+                    low += 1
+                else:
+                    high -= 1
+                    removed.append(ordered[high])
+            seeds = tuple(sorted(ordered[low:high], key=int))
+            selected[record["config"]] = seeds
+            details.append(f"{record['config']}: 사용 시드 {', '.join(seeds)}; "
+                           f"제외 시드(제거 순서) {', '.join(removed) or '없음'}")
+        note = (f"--all-seed: 시드 번호와 무관하게 OFF와 모든 ON 설정을 각각 {count}개로 맞춤. "
+                "초과 시드는 점수 최솟값→최댓값→다음 최솟값→다음 최댓값 순서로 제외. "
+                "동점은 시드 번호 오름차순으로 정렬.\n" + "\n".join(details))
+        return selected, note
+
     shared_seeds = set(baseline["scores"])
     for record in enabled:
         shared_seeds.intersection_update(record["scores"])
     if not shared_seeds:
-        return metrics, paper_metrics, "비교할 완료 run의 공통 시드가 없습니다."
-    baseline_mean = mean(baseline["scores"][seed] for seed in sorted(shared_seeds, key=int))
+        return {}, "비교할 완료 run의 공통 시드가 없습니다."
+    seeds = tuple(sorted(shared_seeds, key=int))
+    description = ("OFF와 모든 ON 설정의 공통 시드" if enabled else
+                   "ON 결과가 없어 완료된 baseline의 유효 시드")
+    return {record["config"]: seeds for record in compared}, f"{description}: {', '.join(seeds)}"
+
+
+def comparison_metrics(records, reference, all_seed=False):
+    """Compare OFF/ON using shared seeds or independently balanced seed counts."""
+    metrics = {record["config"]: [None, None, None] for record in records}
+    paper_metrics = [None, None, None]
+    selected, note = comparison_seeds(records, all_seed)
+    if not selected:
+        return metrics, paper_metrics, note
+    baseline = next(record for record in records if record["retrieval"] == "false")
+    baseline_mean = mean(baseline["scores"][seed] for seed in selected[baseline["config"]])
     metrics[baseline["config"]][0] = baseline_mean
     denominator = reference[1] - reference[0] if reference else None
     if reference:
@@ -76,18 +118,17 @@ def comparison_metrics(records, reference):
         paper_metrics[1] = paper_delta
         if denominator:
             paper_metrics[2] = paper_delta / denominator
-    for record in enabled:
-        on_mean = mean(record["scores"][seed] for seed in sorted(shared_seeds, key=int))
+    for record in records:
+        if record["retrieval"] != "true":
+            continue
+        on_mean = mean(record["scores"][seed] for seed in selected[record["config"]])
         delta = on_mean - baseline_mean
         metrics[record["config"]] = [on_mean, abs(delta),
                                       delta / denominator if denominator else None]
-    description = ("OFF와 모든 ON 설정의 공통 시드" if enabled else
-                   "ON 결과가 없어 완료된 baseline의 유효 시드")
-    note = f"{description}: {', '.join(sorted(shared_seeds, key=int))}"
     return metrics, paper_metrics, note
 
 
-def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=None):
+def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=None, all_seed=False):
     try:
         from openpyxl import Workbook
         from openpyxl.comments import Comment
@@ -123,7 +164,8 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
     workbook = Workbook()
     results = workbook.active
     results.title = "Results"
-    results.append(["Game", "Config", *[int(seed) for seed in seeds], *METRIC_COLUMNS])
+    metric_columns = [ALL_SEED_MEAN_COLUMN, *METRIC_COLUMNS[1:]] if all_seed else METRIC_COLUMNS
+    results.append(["Game", "Config", *[int(seed) for seed in seeds], *metric_columns])
     game_records = defaultdict(list)
     for key, by_seed in sorted(groups.items()):
         cells, seed_scores = [], {}
@@ -157,7 +199,7 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
     game_blocks, paper_rows = [], []
     for (environment, game), records in sorted(game_records.items()):
         reference = reference_scores(environment, game)
-        metrics, paper_metrics, comparison_note = comparison_metrics(records, reference)
+        metrics, paper_metrics, comparison_note = comparison_metrics(records, reference, all_seed)
         first_row = results.max_row + 1
         label = game
         if reference:
@@ -178,10 +220,16 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
                     results.cell(results.max_row, column).comment = Comment(comment, "TWISTER")
             results.cell(results.max_row, mean_column).comment = Comment(comparison_note, "TWISTER")
         game_blocks.append((first_row, results.max_row, label))
-    for offset, description in enumerate((
+    mean_description = (
+        "게임별 OFF와 모든 ON 설정의 완료 시드 수 중 최솟값에 맞춥니다. "
+        "시드 번호는 일치하지 않아도 되며, 초과 시드는 점수 최솟값→최댓값→다음 최솟값→"
+        "다음 최댓값 순서로 제외합니다. 동점은 시드 번호 오름차순으로 정렬합니다. "
+        "실제 사용/제외 시드는 각 평균 셀 메모에 기록합니다. " if all_seed else
         "게임별 OFF와 모든 ON 설정에 유효한 최종 점수가 있는 공통 시드를 사용합니다. "
-        "ON 결과가 아직 없으면 완료된 baseline의 모든 유효 시드를 사용합니다. "
-        "같은 시드의 중복 run은 먼저 평균하며, 실행 중·점수 누락·시드 미확인은 제외합니다.",
+    ) + ("ON 결과가 아직 없으면 완료된 baseline의 모든 유효 시드를 사용합니다. "
+         "같은 시드의 중복 run은 먼저 평균하며, 실행 중·점수 누락·시드 미확인은 제외합니다.")
+    for offset, description in enumerate((
+        mean_description,
         "TWISTER (논문) 행: OFF 평균 − TWISTER 논문 점수 (부호 유지). "
         "ON 행: |ON 평균 − OFF 평균|. OFF 행은 빈칸입니다.",
         "TWISTER (논문) 행: (OFF 평균 − TWISTER 논문 점수) / (Human − Random). "
@@ -270,9 +318,11 @@ def main(argv=None):
     parser.add_argument("--output", type=Path, default=HERE / "performance_twister.xlsx")
     parser.add_argument("--run-overrides", type=Path,
                         help="Run-ID/name config and score corrections; defaults to results/run_overrides.json")
+    parser.add_argument("--all-seed", action="store_true",
+                        help="Ignore seed IDs; equalize OFF/all ON counts by removing lowest/highest scores alternately")
     args = parser.parse_args(argv)
     try:
-        convert_csv_to_excel(args.input, args.output, args.run_overrides)
+        convert_csv_to_excel(args.input, args.output, args.run_overrides, all_seed=args.all_seed)
         return 0
     except (OSError, ValueError, RuntimeError) as error:
         print(f"Excel conversion failed: {error}", file=sys.stderr)

@@ -139,6 +139,37 @@ Excel 시트:
 retrieval config가 없는 과거 run의 정확한 세부 설정 비교에는 당시 설정 정보가
 추가로 필요하지만, 최종 점수 자체의 추출에는 필요하지 않습니다.
 
+### 시드 번호와 무관하게 개수를 맞춰 비교
+
+두 스크립트에 `--all-seed`를 붙이면 공통 시드 대신 게임별로 **OFF와 모든 ON
+설정의 유효 시드 수 중 최솟값**에 맞춰 비교합니다. 옵션이 없으면 기존 공통 시드
+방식을 사용합니다.
+
+```bash
+python results/convert_csv_to_excel.py --all-seed
+python results/update_tex.py --all-seed --dry-run
+python results/update_tex.py --all-seed
+```
+
+같은 설정·시드의 중복 완료 run을 먼저 평균한 뒤, 시드가 더 많은 설정에서
+**점수 최솟값 → 최댓값 → 다음 최솟값 → 다음 최댓값 → …** 순서로 초과 시드를
+제외합니다. 예를 들어 OFF 점수가 `[10, 20, 30, 40, 50]`이고 ON이 2개이면,
+OFF에서 `10 → 50 → 20`을 제외하고 `[30, 40]`으로 계산합니다. 시드 수가 같으면
+모든 시드를 사용하며, 양쪽 시드 번호가 전혀 겹치지 않아도 비교합니다. 점수가
+같으면 시드 번호 오름차순으로 정렬한 뒤 양 끝에서 같은 순서로 제외합니다.
+
+Excel 평균 열은 `Mean (시드 수 맞춤)`으로 표시하고, 셀 메모에 설정별 사용 시드와
+제외 시드의 제거 순서를 기록합니다. 개별 시드 점수 열과 원본 run은 보존하며,
+평균과 Δ Score·Δ HNS만 선택한 시드로 계산합니다. TeX 갱신기도 같은 시드를
+사용하여 게임 점수와 하단 지표 전체(IQM 포함)를 계산하고, 실행 로그에 OFF/ON
+각각의 사용 시드를 표시합니다.
+
+실행 중·실패·warmup·점수 누락·시드 미확인 run은 시드 수에서 제외합니다.
+비교할 설정 중 유효 시드가 0개이면 해당 게임의 비교를 생략합니다. ON 설정이
+여러 개이면 `update_tex.py --on-config`로 표시할 설정을 선택해도 시드 수는
+Excel과 동일하게 모든 ON 설정을 포함한 최솟값에 맞춥니다. ON 설정이 없는 게임은
+기존처럼 Excel에서 OFF의 모든 유효 시드로 평균하고, TeX 비교에서는 제외합니다.
+
 ## 누락된 Atari100k 학습을 TITAN 큐에 추가
 
 ```bash
@@ -196,13 +227,24 @@ python results/update_tex.py --csv results/wandb_runs_classification.csv \
     --tex ../iclr2027_conference.tex --run-overrides results/run_overrides.json
 ```
 
-기본 대상은 `../iclr2027_conference.tex`의 `tab:main_performance`입니다.
-이미 추가된 `TWISTER`, `TWISTER+ours`, `$\Delta$` 세 열의 데이터 셀만 수정합니다.
-제목·열 배치·Random/Human·STORM·DRAMA 열과 다른 표는 그대로 보존합니다.
+`results` 폴더 안에서는 다음과 같이 실행합니다. 기본 CSV·TeX 경로는 스크립트 위치를
+기준으로 정하므로 실행 폴더와 무관합니다. 사용 중인 TeX의 절대 경로도 출력합니다.
+
+```bash
+python update_tex.py --all-seed
+python update_tex.py --all-seed --dry-run
+```
+
+기본 대상은 TWISTER 루트 기준 `../iclr2027_conference.tex`의 `tab:main_performance`입니다.
+`TWISTER`, `TWISTER+ours`, `$\Delta$` 세 열이 있으면 해당 데이터 셀을 갱신합니다.
+없으면 표 끝에 세 열을 추가하고 `tabular`의 열 지정도 함께 확장합니다.
+Random/Human·STORM·DRAMA 셀과 제목·다른 표는 보존합니다.
 기존 STORM·DRAMA 갱신기도 이 세 열이 추가된 배치를 허용하도록 열 검사만
 확장했습니다. 각 갱신기는 자기 방법의 세 열만 갱신합니다.
 
-점수는 Excel의 **Mean (공통 시드)**와 같은 방식으로 집계합니다.
+기본 점수는 Excel의 **Mean (공통 시드)**와 같은 방식으로 집계합니다.
+`--all-seed` 사용 시에는 위의 **시드 수 맞춤** 방식을 사용하며, 아래 HNS 계산식은
+각 설정에서 선택한 시드에 적용합니다.
 
 - 보정 파일을 먼저 적용하고, 완료된 `finished` run의 유한한 최종 점수만 사용합니다.
   실행 중·실패·warmup·점수 누락·시드 미확인 run은 사용하지 않습니다.

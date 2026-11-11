@@ -205,11 +205,13 @@ class Campaign:
             ready = [game for game in unfinished if game not in active_games]
             if not ready:
                 return "wait", state, None, None
-            # Prefer games tried fewer times, breaking ties by the configured
-            # game order. Busy games do not hold up the next pass for idle ones.
+            # Prioritize idle Gopher until its first successful ON/OFF pair.
+            # Otherwise prefer fewer attempts, then the configured game order.
             attempts = {game: sum(trial["game"] == game for trial in state["trials"])
                         for game in ready}
-            game = min(ready, key=attempts.__getitem__)
+            game = min(ready, key=lambda game: (
+                not (game == "gopher" and not successful_trials(state, game)),
+                attempts[game]))
             # Keep legacy artifact/lease round numbers unique, even for games
             # assigned late under the old server-wide round counter.
             round_number = 1 + max((trial["round"] for trial in state["trials"]

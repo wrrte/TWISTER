@@ -91,10 +91,11 @@ Use a Python environment with the TWISTER dependencies and Atari ROMs:
 ./6_train.sh
 ```
 
-Workers prefer unfinished, idle games with the fewest previous attempts, using
-the configured game order to break ties. Each game's seeds are 3090, 3100,
-3110, and so on. Once every game has had its first job assigned, completed games
-can start their next seed while other games are still finishing their first.
+Until Gopher has its first qualifying full FLASH result and completed baseline,
+workers give idle Gopher priority. Otherwise they prefer unfinished, idle games
+with the fewest previous attempts, using the configured game order to break ties.
+Each game's seeds are 3090, 3100, 3110, and so on. Completed games can start
+their next seed while other games are still finishing their first.
 One game has at most one active trial, including its conditional baseline.
 The reported round is the highest trial round started on this server; games can
 be in different rounds. Multiple workers share locks across GPU models.

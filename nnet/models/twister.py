@@ -591,7 +591,7 @@ class TWISTER(models.Model):
                 "Evaluation-final/model_step": int(self.model_step),
                 "Evaluation-final/action_step": int(self.action_step),
             })
-            # TensorBoard sync uses its own step counter; record model_step explicitly.
+            # Keep the training step explicit alongside W&B's history counter.
             wandb_run.log(results)
             wandb_run.summary.update(results)
             if checkpoint is not None:

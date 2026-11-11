@@ -600,23 +600,37 @@ class Model(modules.Module):
 
     def log_step(self, losses, metrics, infos, writer, step, tag):
 
+        scalars = {}
+
+        def log_scalar(key, value):
+            name = os.path.join(tag, key)
+            if isinstance(value, torch.Tensor):
+                value = value.detach().item()
+            value = float(value)
+            if writer is not None:
+                writer.add_scalar(name, value, step)
+            scalars[name] = value
+
         # Losses
         for key, value in losses.items():
-            writer.add_scalar(os.path.join(tag, key), value, step)
+            log_scalar(key, value)
 
         # Metrics
         for key, value in metrics.items():
-            writer.add_scalar(os.path.join(tag, key), value, step)
+            log_scalar(key, value)
 
         # Infos
         for key, value in infos.items():
             if isinstance(value, ScalarInfo):
                 value = value.get_value()
             if isinstance(value, float) or isinstance(value, int):
-                writer.add_scalar(os.path.join(tag, key), float(value), step)
+                log_scalar(key, value)
             elif isinstance(value, torch.Tensor):
                 if value.numel() == 1:
-                    writer.add_scalar(os.path.join(tag, key), float(value), step)
+                    log_scalar(key, value)
+
+        if self.score_logger is not None:
+            self.score_logger.log_scalars(tag, scalars, step)
 
     def print_step(self, losses, metrics, tag):
 

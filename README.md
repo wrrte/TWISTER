@@ -290,8 +290,14 @@ corrections in `results/run_overrides.json`.
 env_name=atari100k-gopher run_name=gopher_seed3110 python3 -u main.py --seed 3110 --wandb_project twister --wandb_entity YOUR_TEAM
 ```
 
-TensorBoard training metrics are synchronized to W&B. Episode returns and periodic
-evaluation scores are also recorded directly under `sample/*` and `eval/*`.
+W&B records scalar metrics directly, including training losses and metrics under
+`Training-step/*` and `Training-epoch/*`, episode returns under `sample/*`, and
+periodic evaluation scores under `eval/*`. Each training namespace has its own
+`global_step` axis. TensorBoard synchronization is disabled: images and raw event
+files under `media/` and `callbacks/` are not uploaded to W&B. Local TensorBoard
+scalars/images, checkpoint files, and replay buffers are still saved as before.
+This applies to newly started training/evaluation processes; existing W&B files
+are not removed by this setting.
 W&B initialization errors stop training instead of continuing without logging.
 Use `--no-wandb` to train with only local TensorBoard logs. Explicit W&B
 `offline`/`disabled` modes skip login and clearly report that no upload occurs.

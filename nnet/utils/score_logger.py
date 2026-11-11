@@ -6,9 +6,24 @@ class ScoreLogger:
         self.writer = writer
         self.wandb_run = wandb_run
         self.episodes = []
+        self.scalar_tags = set()
         if wandb_run is not None:
             wandb_run.define_metric("sample/*", step_metric="sample/env_steps")
             wandb_run.define_metric("eval/*", step_metric="eval/model_step")
+
+    def log_scalars(self, tag, scalars, step, extra=None):
+        """Publish one scalar record, without syncing any TensorBoard files."""
+        if self.wandb_run is None or not scalars:
+            return
+        step_key = tag + "/global_step"
+        if tag not in self.scalar_tags:
+            self.wandb_run.define_metric(tag + "/*", step_metric=step_key)
+            self.scalar_tags.add(tag)
+        record = dict(scalars)
+        record[step_key] = int(step)
+        if extra is not None:
+            record.update(extra)
+        self.wandb_run.log(record)
 
     def add_episode(self, env_name, reward, frames, action_repeat, env_index,
                     episode, model_step, action_step):
@@ -25,15 +40,15 @@ class ScoreLogger:
 
     def flush(self):
         for record in self.episodes:
-            if self.writer is not None:
-                for key, value in record.items():
-                    # A separate namespace prevents duplicate wandb history
-                    # entries when TensorBoard synchronization is enabled.
-                    tag = "Training-episode/" + key.removeprefix("sample/")
+            scalars = {}
+            for key, value in record.items():
+                # Preserve the existing TensorBoard scalar names in W&B too.
+                tag = "Training-episode/" + key.removeprefix("sample/")
+                scalars[tag] = value
+                if self.writer is not None:
                     self.writer.add_scalar(tag, value, record["sample/episode"])
-            if self.wandb_run is not None:
-                # One call per complete episode, including simultaneous finishes.
-                self.wandb_run.log(record)
+            # One call per complete episode, including simultaneous finishes.
+            self.log_scalars("Training-episode", scalars, record["sample/episode"], extra=record)
         self.episodes.clear()
 
     def log_evaluation(self, metrics, model_step, action_step, action_repeat,

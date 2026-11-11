@@ -1,4 +1,4 @@
-"""Authenticate before model setup and make the W&B destination visible."""
+"""Authenticate before model setup and configure scalar-only W&B logging."""
 
 import os
 from pathlib import Path
@@ -70,12 +70,18 @@ def init_wandb_run(callback_path, project=None, entity=None, config=None):
     run = wandb.init(
         project=project or settings.project or "nnet",
         entity=entity or settings.entity,
-        sync_tensorboard=True,
+        # TensorBoard sync uploads both images and the raw callback event files.
+        # Training scalars are logged directly through ScoreLogger instead.
+        sync_tensorboard=False,
+        settings=wandb.Settings(ignore_globs=[
+            *settings.ignore_globs, "media/**", "callbacks/**",
+        ]),
         name=callback_path,
         config=config,
     )
     print("W&B run: mode={}, entity={}, project={}, name={}".format(
         run.settings.mode, run.entity, run.project, run.name), flush=True)
+    print("W&B logging: scalar metrics only; media and callback files stay local.", flush=True)
     if run.settings.mode == "online":
         print("W&B project URL: {}".format(run.project_url), flush=True)
         print("W&B run URL: {}".format(run.url), flush=True)

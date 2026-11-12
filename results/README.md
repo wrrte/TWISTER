@@ -93,9 +93,8 @@ CSV에 없는 run은 완료된 평가 행으로 추가합니다. 원본 CSV는 �
 }
 ```
 
-Gopher seed 3110도 실제 전체 run 이름(예: `callbacks/gopher_seed3110/atari100k-gopher`)을
-키로 추가하면 seed 3110 열이 자동 생성됩니다. run ID를 키로 쓰면서 CSV에 없는 행을
-추가하려면 `env_name`, `seed`, `retrieval_enabled`도 지정해야 합니다. 점수 보정 시
+전체 run 이름을 키로 추가하면 해당 seed 열이 자동 생성됩니다. run ID를 키로 쓰면서
+CSV에 없는 행을 추가하려면 `env_name`, `seed`, `retrieval_enabled`도 지정해야 합니다. 점수 보정 시
 평가 메타데이터는 함께 지정한 값만 사용하며, 생략한 값은 `N/A`로 둡니다.
 
 2026-11-03 사용자가 현재까지 기록된 모든 run을 Retrieval OFF로 확인했습니다.
@@ -104,6 +103,13 @@ Gopher seed 3110도 실제 전체 run 이름(예: `callbacks/gopher_seed3110/ata
 다른 GPU(RTX3090)에서 실행한 Gopher seed 3110의 점수는 **33627.2**, 평균 episode
 steps는 **58265.52**로 기록했습니다. 이 평가의 에피소드 수와 병렬 환경 수는
 확인되지 않았으므로 `N/A`로 둡니다.
+
+이 과거 평가 run(`callbacks/atari100k_seed3110/atari100k-gopher`)만 Excel의
+`Results` 시드 열과 상세 시트에서 **`3110-old`**로 표시합니다. 새로 실행한 Gopher
+seed 3110의 ON/OFF run은 `3110`으로 유지하며, 과거 점수와 중복 평균하거나
+공통 시드로 짝짓지 않습니다. `update_tex.py`도 같은 구분을 적용합니다.
+`--all-seed`에서는 시드 번호와 무관하게 비교하므로 `3110-old`도 별도 유효 시드로
+포함하고, 기존 점수 순서에 따른 개수 조정 규칙을 적용합니다. 원본 CSV는 보존합니다.
 
 Excel 시트:
 

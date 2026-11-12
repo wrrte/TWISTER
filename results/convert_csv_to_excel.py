@@ -50,6 +50,22 @@ HNS_DELTA_COLUMN = "Δ HNS (행별 비교)"
 METRIC_COLUMNS = [PAIRED_MEAN_COLUMN, SCORE_DELTA_COLUMN, HNS_DELTA_COLUMN]
 
 
+def seed_label(row):
+    """Keep the historical Gopher evaluation separate from new seed 3110 runs."""
+    legacy_run = "callbacks/atari100k_seed3110/atari100k-gopher"
+    if (row["Environment"] == "atari100k-gopher" and row["Seed"] == "3110"
+            and row.get("Retrieval Enable", "").lower() == "false"
+            and legacy_run in (row.get("Run ID"), row.get("Run Name"))):
+        return "3110-old"
+    return row["Seed"]
+
+
+def seed_sort_key(seed):
+    """Order numeric seeds and legacy labels; return None for unknown seeds."""
+    match = re.fullmatch(r"(\d+)(-old)?", seed)
+    return (int(match[1]), match[2] or "") if match else None
+
+
 def reference_scores(environment, game):
     key = re.sub(r"[^a-z0-9]", "", game.lower())
     return REFERENCE_SCORES.get(key) if environment.startswith("atari100k-") else None
@@ -72,7 +88,7 @@ def comparison_seeds(records, all_seed=False):
         for record in compared:
             # Duplicate runs have already been averaged into one score per seed.
             ordered = sorted(record["scores"], key=lambda seed: (
-                record["scores"][seed], int(seed), seed))
+                record["scores"][seed], seed_sort_key(seed), seed))
             low, high = 0, len(ordered)
             removed = []
             while high - low > count:
@@ -82,7 +98,7 @@ def comparison_seeds(records, all_seed=False):
                 else:
                     high -= 1
                     removed.append(ordered[high])
-            seeds = tuple(sorted(ordered[low:high], key=int))
+            seeds = tuple(sorted(ordered[low:high], key=seed_sort_key))
             selected[record["config"]] = seeds
             details.append(f"{record['config']}: 사용 시드 {', '.join(seeds)}; "
                            f"제외 시드(제거 순서) {', '.join(removed) or '없음'}")
@@ -96,7 +112,7 @@ def comparison_seeds(records, all_seed=False):
         shared_seeds.intersection_update(record["scores"])
     if not shared_seeds:
         return {}, "비교할 완료 run의 공통 시드가 없습니다."
-    seeds = tuple(sorted(shared_seeds, key=int))
+    seeds = tuple(sorted(shared_seeds, key=seed_sort_key))
     description = ("OFF와 모든 ON 설정의 공통 시드" if enabled else
                    "ON 결과가 없어 완료된 baseline의 유효 시드")
     return {record["config"]: seeds for record in compared}, f"{description}: {', '.join(seeds)}"
@@ -148,6 +164,8 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
     # Reapply confirmed corrections and include evaluated runs absent from an older CSV.
     overrides = load_run_overrides(run_overrides_path)
     apply_run_overrides(rows, overrides)
+    for row in rows:
+        row["Seed"] = seed_label(row)
     if overrides:
         fields.extend(field for field in FIELDS if field not in fields)
     if output == csv_path.resolve():
@@ -159,13 +177,15 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
             continue
         key = (row["Environment"], row["Game"], row["Config"])
         groups[key][row["Seed"]].append(row)
-    seeds = sorted({seed for group in groups.values() for seed in group if seed.isdigit()}, key=int)
+    seeds = sorted({seed for group in groups.values() for seed in group
+                    if seed_sort_key(seed) is not None}, key=seed_sort_key)
 
     workbook = Workbook()
     results = workbook.active
     results.title = "Results"
     metric_columns = [ALL_SEED_MEAN_COLUMN, *METRIC_COLUMNS[1:]] if all_seed else METRIC_COLUMNS
-    results.append(["Game", "Config", *[int(seed) for seed in seeds], *metric_columns])
+    results.append(["Game", "Config", *[int(seed) if seed.isdigit() else seed for seed in seeds],
+                    *metric_columns])
     game_records = defaultdict(list)
     for key, by_seed in sorted(groups.items()):
         cells, seed_scores = [], {}
@@ -227,7 +247,9 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
         "실제 사용/제외 시드는 각 평균 셀 메모에 기록합니다. " if all_seed else
         "게임별 OFF와 모든 ON 설정에 유효한 최종 점수가 있는 공통 시드를 사용합니다. "
     ) + ("ON 결과가 아직 없으면 완료된 baseline의 모든 유효 시드를 사용합니다. "
-         "같은 시드의 중복 run은 먼저 평균하며, 실행 중·점수 누락·시드 미확인은 제외합니다.")
+         "같은 시드의 중복 run은 먼저 평균하며, 실행 중·점수 누락·시드 미확인은 제외합니다. "
+         "Gopher의 과거 수동 평가 baseline은 3110-old로 구분하며 3110과 짝짓지 않습니다. "
+         "--all-seed에서는 별도 시드로 포함합니다.")
     for offset, description in enumerate((
         mean_description,
         "TWISTER (논문) 행: OFF 평균 − TWISTER 논문 점수 (부호 유지). "

@@ -14,7 +14,7 @@ import sys
 import tempfile
 
 from classify_wandb_runs import SCORE_KEY, apply_run_overrides, load_run_overrides, number
-from convert_csv_to_excel import comparison_metrics, comparison_seeds
+from convert_csv_to_excel import comparison_metrics, comparison_seeds, seed_label, seed_sort_key
 
 
 HERE = Path(__file__).resolve().parent
@@ -47,13 +47,13 @@ def load_results(csv_path, run_overrides_path=None, on_config=None, all_seed=Fal
     for row in rows:
         if row.get("Score Status") == "warmup" or not row["Environment"].startswith("atari100k-"):
             continue
-        groups[row["Environment"], row["Game"], row["Config"]][row["Seed"]].append(row)
+        groups[row["Environment"], row["Game"], row["Config"]][seed_label(row)].append(row)
 
     games = defaultdict(list)
     for (environment, game, config), by_seed in sorted(groups.items()):
         scores = {}
         for seed, entries in by_seed.items():
-            if not seed.isdigit():
+            if seed_sort_key(seed) is None:
                 continue
             values = [number(row[SCORE_KEY]) for row in entries
                       if row["State"] == "finished" and number(row[SCORE_KEY]) is not None]

@@ -189,22 +189,7 @@
       "paired_seeds": [
         3100
       ],
-      "baselines": [
-        {
-          "seed": 9997,
-          "score": 33290.0,
-          "enabled": true,
-          "run_ids": [
-            "jhunq4oj"
-          ],
-          "run_names": [
-            "callbacks/kung_fu_master_seed9997/atari100k-kung_fu_master"
-          ],
-          "run_urls": [
-            "https://wandb.ai/choemj-kaist/nnet/runs/jhunq4oj"
-          ]
-        }
-      ]
+      "baselines": []
     },
     "ms_pacman": {
       "paired_baseline_mean": 1828.3,

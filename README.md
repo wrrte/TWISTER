@@ -214,6 +214,13 @@ python reproduce.py --status
 ```
 
 Initial settings are frozen from `configs/defaults.json` plus `override_config`.
+The `N_train.sh` scripts now run a GPU supervisor that starts a fresh
+`reproduce.py --once` process for each trial, so code edits take effect on the
+next trial without watching individual GPU completion times. Normal completion,
+waiting and errors are distinguished; training errors stop rather than retry.
+Already stopped legacy parents can be replaced automatically after their current
+child finishes and GPU memory stays below 1000 MiB for five seconds. See
+[automatic worker transition](reproduction/README.md#이미-정지한-worker-자동-전환).
 The search enforces shared warmup, replay loading, and final evaluation. Restart
 the worker with the same state path to continue after interruption. Completed
 warmup and evaluations are reused; an incomplete ON/OFF branch restarts from the

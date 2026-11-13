@@ -455,6 +455,11 @@ class Campaign:
             pending = []
             for trial in state["trials"]:
                 if trial["game"] in games and trial["status"] not in {"complete", "cancelled"}:
+                    if trial.get("transition_pending"):
+                        # A controller is ingesting a finished legacy child.
+                        # Its parent may release the lease before ingestion.
+                        active_games[trial["game"]] += 1
+                        continue
                     reason = cancellation_reason(trial, progress[trial["game"]])
                     if reason:
                         lease = self._lease(trial)
@@ -820,10 +825,13 @@ def main(argv=None):
     parser.add_argument("--no-wandb", action="store_true", default=None, help="Disable W&B for a new campaign")
     parser.add_argument("--status", action="store_true", help="Read progress without training or pruning")
     parser.add_argument("--once", action="store_true", help="Run at most one available trial, including any conditional baseline; exit without waiting if no trial is available")
+    parser.add_argument("--supervised", action="store_true", help="With --once, return 20 when waiting and 21 when all games are complete")
     parser.add_argument("--server", choices=("a", "b", "c"), help="Bind this server to its game assignment; normally set once with reproduction_cluster.py setup")
     parser.add_argument("--require-server", action="store_true", help="Require cluster setup before starting a worker")
     parser.add_argument("--check-gpu", action="store_true", help="Verify selected GPU model and PyTorch CUDA before starting a worker")
     args = parser.parse_args(argv)
+    if args.supervised and not args.once:
+        parser.error("--supervised requires --once")
     from reproduction_cluster import attach_server, local_settings
     settings = local_settings()
     campaign = Campaign(args.state or settings.get("state") or DEFAULT_STATE)
@@ -861,11 +869,11 @@ def main(argv=None):
             kind, state, trial, lease = campaign.claim()
             if kind == "done":
                 show_status(state)
-                return 0
+                return 21 if args.supervised else 0
             if kind == "wait":
                 if args.once:
                     print("No trial is currently available; --once exits without starting training.", flush=True)
-                    return 0
+                    return 20 if args.supervised else 0
                 time.sleep(10)
                 continue
             try:

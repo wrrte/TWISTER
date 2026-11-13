@@ -5,6 +5,7 @@ import argparse
 from datetime import datetime, timezone
 import fcntl
 import json
+import math
 from pathlib import Path
 import re
 import shutil
@@ -73,11 +74,12 @@ def game_owner(plan, game):
     return next(server for server, entry in plan["servers"].items() if game in entry["games"])
 
 
-def shared_pair_counts(state):
-    """Combine live local pairs and last-sync reports, excluding released copies."""
+def shared_game_progress(state):
+    """Merge completed pairs and qualified OFF work from last-sync reports."""
     shared = state["config"].get("shared_games", [])
     seeds = {game: {trial["seed"] for trial in reproduce.local_successful_trials(state, game)}
              for game in shared}
+    pending = {game: reproduce.pending_full_flash(state, game) for game in shared}
     if not shared:
         return {}
     plan = load_plan()
@@ -88,7 +90,12 @@ def shared_pair_counts(state):
         path = reproduce.ROOT / "reproduction/reports" / f"{server}.json"
         if not path.is_file():
             continue
-        report = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            # Git may briefly replace/truncate a report during sync. The next
+            # poll can consume it without interrupting a healthy local run.
+            continue
         if report.get("version") != 1 or report.get("server") != server:
             raise ValueError(f"Invalid server report: {path}")
         for game in shared:
@@ -106,7 +113,20 @@ def shared_pair_counts(state):
                 if type(count) is not int or count < 0:
                     raise ValueError(f"Invalid successful pair count in {path}: {game}")
                 legacy_counts[game] = count
-    return {game: len(seeds[game]) + legacy_counts[game] for game in shared}
+            for item in progress.get("pending_full_flash", []):
+                seed, score = item["seed"], item["score"]
+                if (type(seed) is not int or not 0 <= seed < 2 ** 32 or isinstance(score, bool)
+                        or not isinstance(score, (int, float)) or not math.isfinite(score)):
+                    raise ValueError(f"Invalid pending full FLASH result in {path}: {game}")
+                pending[game][seed] = max(pending[game].get(seed, score), score)
+    return {game: dict(successful_pairs=len(seeds[game]) + legacy_counts[game],
+                       successful_pair_seeds=seeds[game], pending_full_flash={
+                           seed: score for seed, score in pending[game].items() if seed not in seeds[game]})
+            for game in shared}
+
+
+def shared_pair_counts(state):
+    return {game: progress["successful_pairs"] for game, progress in shared_game_progress(state).items()}
 
 
 def apply_assignment(state, plan=None):
@@ -425,6 +445,8 @@ def export_report(campaign, server):
                     (trial.get("source_status", "complete") == "complete" or trial["baseline"] is not None)
                     for trial in trials),
                 successful_pairs=len(pairs), successful_pair_seeds=sorted({trial["seed"] for trial in pairs}),
+                pending_full_flash=[dict(seed=seed, score=score) for seed, score in
+                                    sorted(reproduce.pending_full_flash(state, game).items())],
                 latest={key: trials[-1].get(key) for key in ("seed", "status", "stage")} if trials else None,
                 top=[dict(seed=trial["seed"], score=trial["full_flash"]["score"],
                           delta_hns=trial["full_flash"]["delta_hns"],

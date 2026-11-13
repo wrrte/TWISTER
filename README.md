@@ -92,10 +92,16 @@ Use a Python environment with the TWISTER dependencies and Atari ROMs:
 ./6_train.sh
 ```
 
-All games have the same priority: workers prefer unfinished games with the
-fewest previous attempts, using configured game order to break ties.
-Gopher and Krull can run different seeds on several GPUs at once. Other games
-have at most one active trial, including its conditional baseline.
+Workers first allocate games with fewer than three completed ON/OFF pairs.
+Within that tier, prefer games with fewer active trials, then fewer attempts
+and configured game order. Every assigned game can run different seeds on
+several GPUs: if only one game is short of three pairs, all four local workers
+(for example A's GPUs 4–7) help that game before anyone starts a fourth pair.
+In-flight attempts do not count as completed pairs or reserve the three-pair
+target. Once the assigned games have three pairs, workers fill their fourth
+pairs at lower priority, with at most one additional local trial per game.
+Gopher and Krull use live local results plus last-sync remote results for both
+the priority and the four-pair goal. Other games keep their server assignment.
 Each game's seeds advance in steps of 10 from 3090, skipping existing local,
 transferred and Excel-reserved seeds. Cluster Gopher uses offsets A=1, B=2,
 C=0; Krull uses A=1, B=0, C=2. Each owner keeps its existing seed stream, while
@@ -136,10 +142,17 @@ For each shared game, the four-pair goal combines live local results with other
 servers' last Git-synced reports. The reports include completed pair seeds to
 deduplicate history; released source copies count at their handoff receiver.
 Old reports without seed lists contribute only from the current game owner.
-Each server reserves slots for its local in-flight trials. Once the combined
-count reaches four, no new trials or historical baselines are claimed for that
-game; in-flight shared trials finish normally. Stale reports can allow more
-than four pairs to finish before the next sync. Baseline gates continue to use
+Once completed pairs plus qualifying full FLASH evaluations cover four slots,
+keep the completed pairs and select the highest-scoring pending full FLASH
+results for the remaining baselines. Workers stop excess warmup, full FLASH,
+baseline or evaluation processes and take the next available game. This uses
+final evaluation results and either baseline gate, not partial training scores.
+Workers check once per second and terminate the child process group; cancellation
+does not stop the worker or retry the cancelled seed. Selected baselines still
+finish. Imported numeric records without usable active recovery do not reserve
+baseline slots. Reports exchange pending qualified seed/score lists as well as
+completed pair seeds. Cross-server decisions use the last sync; results that
+finish before a cancellation is observed can still exceed four. Baseline gates continue to use
 the server's local and transferred history, and top-four artifact retention
 remains local to each server.
 

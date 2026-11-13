@@ -25,6 +25,7 @@ from run_results import write_json
 ROOT = Path(__file__).resolve().parent
 DEFAULT_STATE = ROOT / "results" / "reproduction" / "state.json"
 KEEP = 4
+PRIORITY_PAIRS = 3
 HNS_MARGIN = 0.1
 START_SEED = 3090
 SEED_STEP = 10
@@ -84,11 +85,53 @@ def local_successful_trials(state, game):
 
 
 def successful_pair_counts(state):
-    counts = {game: len(successful_trials(state, game)) for game in state["config"]["games"]}
+    return {game: progress["successful_pairs"] for game, progress in game_progress(state).items()}
+
+
+def pending_full_flash(state, game):
+    """Only live/retryable OFF branches can reserve one of the four pairs."""
+    result = {}
+    for trial in state["trials"]:
+        if (trial["game"] != game or trial["status"] in {"complete", "cancelled"}
+                or trial["full_flash"] is None or trial["baseline"] is not None
+                or (trial.get("imported_from") and not trial.get("baseline_recovery"))):
+            continue
+        accepted = (trial["full_flash"]["passes"] or trial.get("baseline_gate", {}).get("accepted")
+                    or baseline_gate(state, trial)["accepted"])
+        if accepted:
+            result[trial["seed"]] = trial["full_flash"]["score"]
+    return result
+
+
+def game_progress(state):
+    progress = {}
+    for game in state["config"]["games"]:
+        pairs = successful_trials(state, game)
+        progress[game] = dict(successful_pairs=len(pairs),
+                              successful_pair_seeds={trial["seed"] for trial in pairs},
+                              pending_full_flash=pending_full_flash(state, game))
     if state["config"].get("server"):
-        from reproduction_cluster import shared_pair_counts
-        counts.update(shared_pair_counts(state))
-    return counts
+        from reproduction_cluster import shared_game_progress
+        progress.update(shared_game_progress(state))
+    return progress
+
+
+def selected_pending_seeds(progress):
+    needed = max(0, KEEP - progress["successful_pairs"])
+    pending = {seed: score for seed, score in progress["pending_full_flash"].items()
+               if seed not in progress["successful_pair_seeds"]}
+    if len(pending) < needed:
+        return None
+    # Completed pairs always count. Fill remaining slots by full FLASH score;
+    # a seed's baseline is protected while that seed belongs to this selection.
+    return set(sorted(pending, key=lambda seed: (-pending[seed], seed))[:needed])
+
+
+def cancellation_reason(trial, progress):
+    selected = selected_pending_seeds(progress)
+    if selected is not None and trial["seed"] not in selected:
+        return "Four completed pairs or qualifying full FLASH results are already secured"
+    return None
 
 
 def game_trials(state, game):
@@ -236,7 +279,7 @@ class Campaign:
             if (trial.get("imported_from") or trial["game"] not in state["config"]["games"]
                     or not trial.get("cleanup_pending")):
                 continue
-            if any(item["game"] == trial["game"] and item["status"] != "complete"
+            if any(item["game"] == trial["game"] and item["status"] not in {"complete", "cancelled"}
                    for item in state["trials"]):
                 # Finish the new pair before deciding whether its high score
                 # makes a pending historical baseline usable.
@@ -319,38 +362,64 @@ class Campaign:
             self._cleanup(state)
             # A lease is inherited by the child as well: killing only its worker
             # cannot let another GPU reuse this trial while training is alive.
+            games = state["config"]["games"]
+            progress = game_progress(state)
+            counts = {game: item["successful_pairs"] for game, item in progress.items()}
             active_games = Counter()
             shared_games = state["config"].get("shared_games", [])
+            pending = []
             for trial in state["trials"]:
-                if (trial["game"] in state["config"]["games"] and trial["status"] != "complete"
-                        and (trial["game"] in shared_games
-                             or len(successful_trials(state, trial["game"])) < KEEP)):
+                if trial["game"] in games and trial["status"] not in {"complete", "cancelled"}:
+                    reason = cancellation_reason(trial, progress[trial["game"]])
+                    if reason:
+                        lease = self._lease(trial)
+                        if lease is not None:
+                            try:
+                                trial.update(status="cancelled", stage="cancelled", error=None,
+                                             cancellation_reason=reason)
+                                write_json(self.path, state)
+                            finally:
+                                lease.close()
+                        continue
                     active_games[trial["game"]] += 1
+                    pending.append(trial)
+            unfinished = [game for game in games if counts[game] < KEEP]
+            parallel_games = state["config"].get("shared_games", ("gopher", "krull"))
+            # Finish each game's first three pairs before allocating fourth
+            # pairs. Even interrupted fourth-pair work stays in the lower tier.
+            for first_three in (True, False):
+                tier = {game for game in games if (counts[game] < PRIORITY_PAIRS) == first_three}
+                for trial in pending:
+                    if trial["game"] not in tier:
+                        continue
                     lease = self._lease(trial)
                     if lease is not None:
                         trial.update(status="running", worker=f"{socket.gethostname()}:{os.getpid()}", error=None)
                         write_json(self.path, state)
                         return "trial", state, dict(trial), lease
-            games = state["config"]["games"]
-            counts = successful_pair_counts(state)
-            unfinished = [game for game in games if counts[game] < KEEP]
-            if not unfinished:
-                return "done", state, None, None
-            parallel_games = state["config"].get("shared_games", ("gopher", "krull"))
-            # Reserve one remaining pair slot per local in-flight trial. Other
-            # games still have at most one active ON/OFF trial.
-            ready = [game for game in unfinished if active_games[game] < (
-                KEEP - counts[game] if game in parallel_games else 1)]
-            if not ready:
-                return "wait", state, None, None
-            # All games prefer fewer attempts, then configured game order.
-            attempts = {game: len(game_trials(state, game)) for game in ready}
-            ordered = sorted(ready, key=attempts.__getitem__)
-            for game in ordered:
-                recovered = self._claim_historical(state, game)
-                if recovered is not None:
-                    return recovered
-            game = ordered[0]
+                # Before three completed pairs, any assigned game can occupy
+                # additional GPUs. In-flight attempts are not successful pairs:
+                # one lagging game can use all four GPUs instead of fourth pairs.
+                ready = [game for game in unfinished if game in tier
+                         and selected_pending_seeds(progress[game]) is None and (
+                    first_three or active_games[game] < (
+                        KEEP - counts[game] if game in parallel_games else 1))]
+                if not ready:
+                    continue
+                # Spread work over idle/less occupied games before duplicating
+                # a busy game, then use attempts and configured order as before.
+                least_active = min(active_games[game] for game in ready)
+                ready = [game for game in ready if active_games[game] == least_active]
+                attempts = {game: len(game_trials(state, game)) for game in ready}
+                ordered = sorted(ready, key=attempts.__getitem__)
+                for game in ordered:
+                    recovered = self._claim_historical(state, game)
+                    if recovered is not None:
+                        return recovered
+                game = ordered[0]
+                break
+            else:
+                return ("wait" if unfinished else "done"), state, None, None
             # Keep legacy artifact/lease round numbers unique, even for games
             # assigned late under the old server-wide round counter.
             round_number = 1 + max((trial["round"] for trial in game_trials(state, game)), default=0)
@@ -376,7 +445,7 @@ class Campaign:
             saved.update(changes)
             # A low-scoring fifth result can still qualify through the mean
             # gate. Keep its shared warmup until its baseline has finished.
-            if saved["status"] == "complete":
+            if saved["status"] in {"complete", "cancelled"}:
                 for loser in retained_trials(state, trial["game"])[KEEP:]:
                     if not self._recoverable(state, loser):
                         loser.update(retained=False, cleanup_pending=True)
@@ -399,20 +468,37 @@ class Campaign:
                 write_json(self.path, state)
             return dict(saved)
 
+    def check_cancellation(self, trial):
+        state = self.read()
+        saved = next(item for item in state["trials"]
+                     if (item["game"], item["round"]) == (trial["game"], trial["round"]))
+        reason = (saved.get("cancellation_reason") if saved["status"] == "cancelled"
+                  else cancellation_reason(saved, game_progress(state)[trial["game"]]))
+        if reason:
+            raise TrialCancelled(reason)
 
-def stop_child(process):
+
+def stop_child(process, grace=10):
     try:
         os.killpg(process.pid, signal.SIGTERM)
     except ProcessLookupError:
+        process.wait()
         return
     try:
-        process.wait(timeout=10)
+        process.wait(timeout=grace)
     except subprocess.TimeoutExpired:
         try:
             os.killpg(process.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
         process.wait()
+    finally:
+        # The leader may exit before an environment child that ignores TERM.
+        # Reclaim the whole group before this GPU starts its next trial.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 class TrainingProcessError(RuntimeError):
@@ -421,18 +507,35 @@ class TrainingProcessError(RuntimeError):
         super().__init__(f"Training exited with {code}; see {logfile}")
 
 
-def run_command(command, environment, lease, logfile):
+class TrialCancelled(RuntimeError):
+    """Normal scheduling cancellation, distinct from a training failure."""
+
+
+def run_command(command, environment, lease, logfile, campaign=None, trial=None):
+    if campaign is not None:
+        campaign.check_cancellation(trial)
     print(f"Running {' '.join(command)}\nLog: {logfile}", flush=True)
     with logfile.open("a", encoding="utf-8") as stream:
         process = subprocess.Popen(command, cwd=ROOT, env=environment, stdout=stream,
                                    stderr=subprocess.STDOUT, start_new_session=True,
                                    pass_fds=(lease.fileno(),))
+        cancelled = False
         try:
-            code = process.wait()
+            while True:
+                try:
+                    code = process.wait(timeout=1 if campaign is not None else None)
+                    break
+                except subprocess.TimeoutExpired:
+                    campaign.check_cancellation(trial)
+        except TrialCancelled:
+            cancelled = True
+            raise
         finally:
             # Reap environment processes even after the training leader exits.
-            stop_child(process)
+            stop_child(process, grace=1 if cancelled else 10)
     if code:
+        if campaign is not None:
+            campaign.check_cancellation(trial)
         raise TrainingProcessError(code, logfile)
 
 
@@ -473,7 +576,7 @@ def run_independent_branch(campaign, state, trial, lease, enabled, environment):
         command.append("--no-wandb")
     print(f"{trial['game']} seed {trial['seed']}: {branch} starts from step zero "
           "because no usable shared warmup exists.", flush=True)
-    run_command(command, environment, lease, directory / (branch + ".log"))
+    run_command(command, environment, lease, directory / (branch + ".log"), campaign, trial)
 
 
 def validate_baseline_candidate(candidate, state, trial):
@@ -489,7 +592,7 @@ def validate_baseline_candidate(candidate, state, trial):
     return checkpoint
 
 
-def evaluate_warmup_baseline(state, trial, lease, environment):
+def evaluate_warmup_baseline(state, trial, lease, environment, campaign=None):
     """Evaluate existing baseline weights; perform no optimizer updates."""
     directory, run_name, paths = trial_paths(state, trial)
     candidate = trial["warmup_fallback"]["baseline_candidate"]
@@ -515,12 +618,13 @@ def evaluate_warmup_baseline(state, trial, lease, environment):
         command.append("--no-wandb")
     print(f"{trial['game']} seed {trial['seed']}: evaluating the completed warmup as baseline; "
           "no baseline training is needed.", flush=True)
-    run_command(command, environment, lease, directory / "baseline.log")
+    run_command(command, environment, lease, directory / "baseline.log", campaign, trial)
 
 
 def run_trial(campaign, state, trial, lease):
     from retrieval_runs import branch_commands, WARMUP_UNAVAILABLE_EXIT_CODE
 
+    campaign.check_cancellation(trial)
     directory, run_name, paths = trial_paths(state, trial)
     shared = paths["warmup"] / "shared_warmup"
     environment = dict(os.environ, env_name="atari100k-" + trial["game"], run_name=run_name,
@@ -551,7 +655,7 @@ def run_trial(campaign, state, trial, lease):
             if state["config"]["no_wandb"]:
                 command.append("--no-wandb")
             try:
-                run_command(command, environment, lease, directory / "warmup.log")
+                run_command(command, environment, lease, directory / "warmup.log", campaign, trial)
             except TrainingProcessError as error:
                 if error.code != WARMUP_UNAVAILABLE_EXIT_CODE:
                     raise
@@ -576,7 +680,7 @@ def run_trial(campaign, state, trial, lease):
             else:
                 command, _ = branch_commands(shared)
                 command[0] = python
-                run_command(command, environment, lease, directory / "full_flash.log")
+                run_command(command, environment, lease, directory / "full_flash.log", campaign, trial)
         result = read_evaluation(result_path, state, trial, True)
         comparison = compare_score(result["metrics"]["score"], state["config"]["references"][trial["game"]])
         comparison["evaluation"] = result
@@ -593,13 +697,13 @@ def run_trial(campaign, state, trial, lease):
         result_path = paths["baseline"] / "final_evaluation.json"
         if not result_path.is_file():
             if trial.get("warmup_fallback", {}).get("baseline_candidate"):
-                evaluate_warmup_baseline(state, trial, lease, environment)
+                evaluate_warmup_baseline(state, trial, lease, environment, campaign)
             elif trial.get("warmup_fallback"):
                 run_independent_branch(campaign, state, trial, lease, False, environment)
             else:
                 _, command = branch_commands(shared)
                 command[0] = python
-                run_command(command, environment, lease, directory / "baseline.log")
+                run_command(command, environment, lease, directory / "baseline.log", campaign, trial)
         result = read_evaluation(result_path, state, trial, False)
         trial = campaign.update(trial, baseline=result)
     campaign.update(trial, stage="done", status="complete", error=None)
@@ -676,6 +780,10 @@ def main(argv=None):
             try:
                 print(f"Round {trial['round']}: {trial['game']} seed {trial['seed']}", flush=True)
                 run_trial(campaign, state, trial, lease)
+            except TrialCancelled as error:
+                campaign.update(trial, status="cancelled", stage="cancelled", error=None,
+                                cancellation_reason=str(error))
+                print(f"{trial['game']} seed {trial['seed']}: cancelled excess work; taking the next game.", flush=True)
             except BaseException as error:
                 campaign.update(trial, status="interrupted" if isinstance(error, KeyboardInterrupt) else "error",
                                 error=str(error))

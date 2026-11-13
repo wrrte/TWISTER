@@ -4,9 +4,13 @@ import copy
 from contextlib import redirect_stdout
 import io
 import json
+import os
 from pathlib import Path
 import sys
+import signal
+import subprocess
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -104,7 +108,7 @@ class CampaignTests(WorkspaceTests):
         write_json(self.campaign.path, saved)
         _, _, paths = r.trial_paths(saved, current)
 
-        def finish_baseline(command, environment, lease, logfile):
+        def finish_baseline(command, environment, lease, logfile, *context):
             self.assertEqual(command, [sys.executable, "baseline"])
             paths["baseline"].mkdir(parents=True)
             checkpoint = paths["baseline"] / "final.ckpt"
@@ -182,6 +186,267 @@ class CampaignTests(WorkspaceTests):
         self.assertEqual(kind, "trial")
         self.assertEqual(item["seed"], 3140)
         self.assertEqual(item["round"], 6)
+
+
+class PrioritySchedulingTests(WorkspaceTests):
+    def progress(self, counts):
+        trials = [trial(3090 + index * 10, 1000000, 1, game=game,
+                        round_number=index + 1, reference=REFERENCES[game])
+                  for game, count in counts.items() for index in range(count)]
+        saved = state(trials, list(counts))
+        saved["config"]["references"] = copy.deepcopy(REFERENCES)
+        write_json(self.campaign.path, saved)
+
+    def claim(self):
+        result = self.campaign.claim()
+        if result[3] is not None:
+            self.addCleanup(result[3].close)
+        return result
+
+    def finish(self, item):
+        self.campaign.update(item, status="complete", stage="done",
+                             full_flash=r.compare_score(1000000, REFERENCES[item["game"]]),
+                             baseline=dict(metrics=dict(score=1)))
+
+    def test_two_pairs_beat_three_even_after_many_failed_attempts(self):
+        self.progress({"alien": 3, "amidar": 2})
+        saved = self.campaign.read()
+        saved["trials"].extend(trial(4000 + i * 10, 0, game="amidar", round_number=i + 3,
+                                     reference=REFERENCES["amidar"]) for i in range(10))
+        write_json(self.campaign.path, saved)
+        self.assertEqual(self.claim()[2]["game"], "amidar")
+
+    def test_one_lagging_ordinary_game_can_fill_all_four_gpus(self):
+        self.progress({"alien": 2, "amidar": 3, "assault": 3, "asterix": 3})
+        items = [self.claim()[2] for _ in range(4)]
+        self.assertEqual([item["game"] for item in items], ["alien"] * 4)
+        self.assertEqual([item["seed"] for item in items], [3110, 3120, 3130, 3140])
+        self.assertEqual(len({item["round"] for item in items}), 4)
+
+    def test_two_lagging_games_share_four_gpus_before_fourth_pairs(self):
+        self.progress({"alien": 2, "amidar": 2, "assault": 3})
+        self.assertEqual([self.claim()[2]["game"] for _ in range(4)],
+                         ["alien", "amidar", "alien", "amidar"])
+
+    def test_idle_lagging_games_are_used_before_duplicating_busy_games(self):
+        self.progress({"alien": 0, "amidar": 2, "assault": 1, "asterix": 2})
+        games = [self.claim()[2]["game"] for _ in range(4)]
+        self.assertEqual(len(set(games)), 4)
+
+    def test_inflight_full_flash_is_not_a_completed_pair(self):
+        self.progress({"alien": 2, "amidar": 3})
+        first = self.claim()[2]
+        self.campaign.update(first, stage="baseline", full_flash=r.compare_score(1000000, REFERENCES["alien"]))
+        second = self.claim()[2]
+        self.assertEqual(second["game"], "alien")
+        self.assertNotEqual(second["seed"], first["seed"])
+
+    def test_all_three_pairs_unlock_fourth_pairs_and_then_stop(self):
+        self.progress({"alien": 3, "amidar": 3})
+        items = [self.claim()[2] for _ in range(2)]
+        self.assertEqual([item["game"] for item in items], ["alien", "amidar"])
+        self.assertEqual(self.claim()[0], "wait")
+        for item in items:
+            self.finish(item)
+        self.assertEqual(self.claim()[0], "done")
+
+    def test_reaching_three_changes_priority_on_next_claim(self):
+        self.progress({"alien": 2, "amidar": 3})
+        first = self.claim()[2]
+        self.finish(first)
+        second = self.claim()[2]
+        self.assertEqual(second["game"], "alien")
+        self.finish(second)
+        self.assertEqual(self.claim()[2]["game"], "amidar")
+
+    def test_interrupted_fourth_pair_does_not_preempt_a_third_pair(self):
+        self.progress({"alien": 3, "amidar": 2})
+        saved = self.campaign.read()
+        saved["trials"].append(trial(3120, game="alien", round_number=4, status="interrupted"))
+        write_json(self.campaign.path, saved)
+        first = self.claim()[2]
+        self.assertEqual(first["game"], "amidar")
+        self.finish(first)
+        resumed = self.claim()[2]
+        self.assertEqual((resumed["game"], resumed["seed"]), ("alien", 3120))
+
+    def test_late_results_finished_before_cancellation_are_still_recorded(self):
+        self.progress({"alien": 2})
+        items = [self.claim()[2] for _ in range(4)]
+        for item in items:
+            self.finish(item)
+        saved = self.campaign.read()
+        self.assertEqual(len(r.successful_trials(saved, "alien")), 6)
+        self.assertEqual(len(r.retained_trials(saved, "alien")), 4)
+        self.assertEqual(self.claim()[0], "done")
+
+
+class CancellationTests(WorkspaceTests):
+    def work(self, scores, pairs=0, extras=1):
+        completed = [trial(3000 + i * 10, 200, 1, round_number=i + 1) for i in range(pairs)]
+        pending = [trial(3090 + i * 10, score, round_number=pairs + i + 1, status="running")
+                   for i, score in enumerate(scores)]
+        for item in pending:
+            item["stage"] = "baseline"
+        extra = [trial(3090 + (len(scores) + i) * 10, round_number=pairs + len(scores) + i + 1,
+                       status="running") for i in range(extras)]
+        return self.save(completed + pending + extra), pending, extra
+
+    def hold(self, item):
+        lease = self.campaign._lease(item)
+        self.addCleanup(lease.close)
+        return lease
+
+    def test_four_qualifying_full_results_cancel_extras_and_protect_baselines(self):
+        _, pending, extra = self.work([100, 110, 120, 130])
+        for item in pending:
+            self.campaign.check_cancellation(item)
+        with self.assertRaises(r.TrialCancelled):
+            self.campaign.check_cancellation(extra[0])
+
+    def test_three_qualifying_full_results_are_not_enough_to_cancel(self):
+        _, _, extra = self.work([100, 110, 120])
+        self.campaign.check_cancellation(extra[0])
+
+    def test_rejected_full_results_do_not_reserve_pairs(self):
+        _, _, extra = self.work([80, 80, 80, 80])
+        self.campaign.check_cancellation(extra[0])
+
+    def test_completed_pairs_reduce_required_pending_baselines(self):
+        _, pending, extra = self.work([100, 110], pairs=2)
+        for item in pending:
+            self.campaign.check_cancellation(item)
+        with self.assertRaises(r.TrialCancelled):
+            self.campaign.check_cancellation(extra[0])
+
+    def test_mean_qualified_full_results_also_reserve_pairs(self):
+        _, pending, extra = self.work([80, 80, 80], pairs=1)
+        self.assertTrue(all(not item["full_flash"]["passes"] for item in pending))
+        with self.assertRaises(r.TrialCancelled):
+            self.campaign.check_cancellation(extra[0])
+
+    def test_existing_accepted_baseline_gates_remain_qualified(self):
+        saved, pending, extra = self.work([10, 10, 10], pairs=1)
+        for item in saved["trials"]:
+            if item["seed"] in {record["seed"] for record in pending}:
+                item["baseline_gate"] = dict(accepted=True)
+        write_json(self.campaign.path, saved)
+        with self.assertRaises(r.TrialCancelled):
+            self.campaign.check_cancellation(extra[0])
+
+    def test_numeric_imports_without_recovery_resources_do_not_reserve_pairs(self):
+        saved, pending, extra = self.work([100, 110, 120, 130])
+        for item in saved["trials"][:-1]:
+            item["imported_from"] = "b"
+        write_json(self.campaign.path, saved)
+        self.campaign.check_cancellation(extra[0])
+
+    def test_completed_pairs_are_kept_and_best_remaining_full_scores_are_selected(self):
+        _, pending, extra = self.work([100, 110, 120, 130], pairs=1)
+        with self.assertRaises(r.TrialCancelled):
+            self.campaign.check_cancellation(pending[0])
+        for item in pending[1:]:
+            self.campaign.check_cancellation(item)
+
+    def test_claim_cancels_stale_extras_and_moves_gpu_to_another_game(self):
+        saved, pending, extra = self.work([100, 110, 120, 130])
+        saved["config"]["games"].append("alien")
+        saved["config"]["references"]["alien"] = REFERENCES["alien"]
+        write_json(self.campaign.path, saved)
+        for item in pending:
+            self.hold(item)
+        kind, _, item, lease = self.campaign.claim()
+        self.addCleanup(lease.close)
+        self.assertEqual((kind, item["game"]), ("trial", "alien"))
+        cancelled = next(item for item in self.campaign.read()["trials"] if item["seed"] == extra[0]["seed"])
+        self.assertEqual(cancelled["status"], "cancelled")
+
+    def test_no_new_seed_is_claimed_while_four_selected_baselines_are_running(self):
+        _, pending, _ = self.work([100, 110, 120, 130], extras=0)
+        for item in pending:
+            self.hold(item)
+        self.assertEqual(self.campaign.claim()[0], "wait")
+        self.assertEqual(len(self.campaign.read()["trials"]), 4)
+
+    def test_cancelled_trial_never_starts_a_child(self):
+        _, _, extra = self.work([100, 110, 120, 130])
+        lease = self.hold(extra[0])
+        with mock.patch.object(r.subprocess, "Popen") as launch, self.assertRaises(r.TrialCancelled):
+            r.run_command([sys.executable, "-c", "raise SystemExit(0)"], dict(os.environ), lease,
+                          self.root / "cancelled.log", self.campaign, extra[0])
+        launch.assert_not_called()
+
+    def test_live_cancellation_reaps_leader_and_term_ignoring_descendant(self):
+        _, _, extra = self.work([])
+        lease = self.hold(extra[0])
+        guard = mock.Mock()
+        guard.check_cancellation.side_effect = [None, r.TrialCancelled("quota secured")]
+        child_script = "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); time.sleep(60)"
+        script = ("import subprocess,sys,time; child=subprocess.Popen([sys.executable,'-c',sys.argv[1]]); "
+                  "print(child.pid,flush=True); time.sleep(60)")
+        processes = []
+        original_popen = subprocess.Popen
+
+        def launch(*args, **kwargs):
+            process = original_popen(*args, **kwargs)
+            processes.append(process)
+            return process
+
+        started = time.monotonic()
+        try:
+            with mock.patch.object(r.subprocess, "Popen", side_effect=launch), self.assertRaises(r.TrialCancelled):
+                r.run_command([sys.executable, "-u", "-c", script, child_script], dict(os.environ), lease,
+                              self.root / "live.log", guard, extra[0])
+            self.assertIsNotNone(processes[0].poll())
+            self.assertLess(time.monotonic() - started, 8)
+            child_pid = int((self.root / "live.log").read_text().strip())
+            for _ in range(100):
+                path = Path(f"/proc/{child_pid}/stat")
+                if not path.exists() or path.read_text().split()[2] == "Z":
+                    break
+                time.sleep(0.01)
+            else:
+                self.fail("Cancelled worker left a live environment child behind")
+        finally:
+            for process in processes:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
+
+    def test_training_failure_is_not_treated_as_quota_cancellation(self):
+        _, _, extra = self.work([])
+        lease = self.hold(extra[0])
+        with self.assertRaises(r.TrainingProcessError) as error:
+            r.run_command([sys.executable, "-c", "raise SystemExit(7)"], dict(os.environ), lease,
+                          self.root / "failure.log", mock.Mock(), extra[0])
+        self.assertEqual(error.exception.code, 7)
+
+    def test_worker_continues_with_next_game_after_cancellation(self):
+        saved, _, extra = self.work([])
+        other = trial(3090, game="alien", status="running", reference=REFERENCES["alien"])
+        saved["trials"].append(other)
+        saved["config"]["games"].append("alien")
+        saved["config"]["references"]["alien"] = REFERENCES["alien"]
+        write_json(self.campaign.path, saved)
+        first_lease, second_lease = self.hold(extra[0]), self.hold(other)
+
+        def train(campaign, current, item, lease):
+            if item["game"] == "gopher":
+                raise r.TrialCancelled("quota secured")
+            campaign.update(item, status="complete", full_flash=r.compare_score(1000000, REFERENCES["alien"]),
+                            baseline=dict(metrics=dict(score=1)))
+
+        claims = [("trial", saved, extra[0], first_lease), ("trial", saved, other, second_lease),
+                  ("done", saved, None, None)]
+        with mock.patch.object(r.Campaign, "claim", side_effect=claims), \
+                mock.patch.object(r, "run_trial", side_effect=train) as run, redirect_stdout(io.StringIO()):
+            self.assertEqual(r.main(["--state", str(self.campaign.path)]), 0)
+        self.assertEqual(run.call_count, 2)
+        records = self.campaign.read()["trials"]
+        self.assertEqual(records[0]["status"], "cancelled")
+        self.assertEqual(records[1]["status"], "complete")
 
 
 class WorkbookTests(unittest.TestCase):
@@ -316,7 +581,7 @@ class RecoveryTests(WorkspaceTests):
         _, claimed_state, recovered, lease = self.campaign.claim()
         self.addCleanup(lease.close)
 
-        def finish(command, environment, lease, logfile):
+        def finish(command, environment, lease, logfile, *context):
             self.assertEqual(command, [sys.executable, "OFF"])
             paths["baseline"].mkdir(parents=True)
             final = paths["baseline"] / "final.ckpt"
@@ -393,6 +658,21 @@ class RecoveryTests(WorkspaceTests):
         pairs = [trial(3090 + i * 10, 150, 1, round_number=i + 1) for i in range(4)]
         self.save(pairs + [trial(3130, 80, round_number=5, status="interrupted")])
         self.assertEqual(self.campaign.claim()[0], "done")
+
+    def test_fourth_pair_recovery_waits_for_another_games_third_pair(self):
+        old = trial(3090, 80)
+        gopher_pairs = [trial(3100 + i * 10, 200, 1, round_number=i + 2) for i in range(3)]
+        alien_pairs = [trial(3090 + i * 10, 1000000, 1, game="alien", round_number=i + 1,
+                             reference=REFERENCES["alien"]) for i in range(2)]
+        saved = self.save([old] + gopher_pairs + alien_pairs)
+        saved["config"]["games"] = ["gopher", "alien"]
+        saved["config"]["references"]["alien"] = REFERENCES["alien"]
+        write_json(self.campaign.path, saved)
+        self.resources(saved, old)
+        _, _, item, lease = self.campaign.claim()
+        self.addCleanup(lease.close)
+        self.assertEqual(item["game"], "alien")
+        self.assertNotIn("baseline_recovery", self.campaign.read()["trials"][0])
 
     def test_imported_scores_without_artifacts_never_start_from_scratch(self):
         old = trial(3090, 80)
@@ -577,10 +857,12 @@ class SharedGamesTests(WorkspaceTests):
                 for seed in (5000, 5010, 5020, 5030):
                     self.pair(campaign, game, seed)
 
-    def report(self, server, game, seeds=None, count=0):
+    def report(self, server, game, seeds=None, count=0, pending=None):
         progress = dict(successful_pairs=count if seeds is None else len(seeds))
         if seeds is not None:
             progress["successful_pair_seeds"] = seeds
+        if pending is not None:
+            progress["pending_full_flash"] = [dict(seed=seed, score=score) for seed, score in pending]
         write_json(self.root / "reproduction/reports" / f"{server}.json",
                    dict(version=1, server=server, games={game: progress}))
 
@@ -602,7 +884,7 @@ class SharedGamesTests(WorkspaceTests):
         self.assertEqual([self.claim(self.campaign)[2]["game"] for _ in range(3)],
                          ["alien", "gopher", "krull"])
 
-    def test_both_games_allow_four_concurrent_distinct_trials(self):
+    def test_both_games_can_fill_additional_gpus_before_three_pairs(self):
         for game in ("gopher", "krull"):
             with self.subTest(game=game):
                 campaign = r.Campaign(self.root / f"parallel_{game}.json")
@@ -612,16 +894,34 @@ class SharedGamesTests(WorkspaceTests):
                 trials = [self.claim(campaign)[2] for _ in range(4)]
                 self.assertEqual([item["seed"] for item in trials], [3090, 3100, 3110, 3120])
                 self.assertEqual(len({item["round"] for item in trials}), 4)
-                self.assertEqual(self.claim(campaign)[0], "wait")
-                campaign.update(trials[0], status="complete", full_flash=r.compare_score(0, (0, 100, 100)))
                 self.assertEqual(self.claim(campaign)[2]["seed"], 3130)
+                campaign.update(trials[0], status="complete", full_flash=r.compare_score(0, (0, 100, 100)))
+                self.assertEqual(self.claim(campaign)[2]["seed"], 3140)
 
-    def test_other_games_remain_serial(self):
-        saved = self.save([])
+    def test_fourth_pair_for_other_games_remains_serial(self):
+        saved = self.save([trial(3090 + i * 10, 1000000, 1, game="alien", round_number=i + 1,
+                                 reference=REFERENCES["alien"]) for i in range(3)])
         saved["config"].update(games=["alien"], references=copy.deepcopy(REFERENCES))
         write_json(self.campaign.path, saved)
         self.assertEqual(self.claim(self.campaign)[0], "trial")
         self.assertEqual(self.claim(self.campaign)[0], "wait")
+
+    def test_a_workers_four_through_seven_can_share_one_lagging_ordinary_game(self):
+        campaign = self.server("a")
+        for game in campaign.read()["config"]["games"]:
+            for index in range(2 if game == "alien" else 3):
+                self.pair(campaign, game, 3090 + index * 10)
+        items = [self.claim(campaign)[2] for _ in (4, 5, 6, 7)]
+        self.assertEqual([item["game"] for item in items], ["alien"] * 4)
+        self.assertEqual(len({item["seed"] for item in items}), 4)
+
+    def test_remote_three_pairs_demote_a_shared_game_below_local_two_pairs(self):
+        campaign = self.server("a")
+        self.finish_others(campaign, {"alien", "gopher"})
+        self.pair(campaign, "alien", 3090)
+        self.pair(campaign, "alien", 3100)
+        self.report("c", "gopher", seeds=[3130, 3140, 3150])
+        self.assertEqual([self.claim(campaign)[2]["game"] for _ in range(4)], ["alien"] * 4)
 
     def test_server_seed_streams_preserve_owner_and_avoid_overlap(self):
         expected = {"gopher": {"a": 3091, "b": 3092, "c": 3130},
@@ -670,7 +970,7 @@ class SharedGamesTests(WorkspaceTests):
         campaign.update(item, status="complete", baseline=dict(metrics=dict(score=1)))
         self.assertEqual(self.claim(campaign)[0], "done")
 
-    def test_inflight_shared_trial_can_resume_after_remote_goal_is_met(self):
+    def test_inflight_shared_trial_is_cancelled_after_remote_goal_is_met(self):
         campaign = self.server("a")
         self.finish_others(campaign, {"gopher"})
         _, _, item, lease = self.claim(campaign)
@@ -678,7 +978,9 @@ class SharedGamesTests(WorkspaceTests):
         self.assertEqual(self.claim(campaign)[0], "done")
         campaign.update(item, status="interrupted")
         lease.close()
-        self.assertEqual(self.claim(campaign)[2]["seed"], item["seed"])
+        self.assertEqual(self.claim(campaign)[0], "done")
+        saved = next(record for record in campaign.read()["trials"] if record["seed"] == item["seed"])
+        self.assertEqual(saved["status"], "cancelled")
 
     def test_source_keeps_new_shared_trials_separate_from_released_history(self):
         campaign = self.server("b")
@@ -726,6 +1028,46 @@ class SharedGamesTests(WorkspaceTests):
         self.pair(campaign, "krull", 3091)
         self.report("b", "krull", count=3)
         self.assertEqual(r.successful_pair_counts(campaign.read())["krull"], 4)
+
+    def test_remote_qualified_full_results_cancel_excess_local_training(self):
+        campaign = self.server("a")
+        self.finish_others(campaign, {"gopher"})
+        item = self.claim(campaign)[2]
+        self.report("c", "gopher", seeds=[], pending=[(3130 + i * 10, 1000000) for i in range(4)])
+        with self.assertRaises(r.TrialCancelled):
+            campaign.check_cancellation(item)
+
+    def test_report_exports_pending_full_results_separately_from_completed_pairs(self):
+        campaign = self.server("a")
+        self.finish_others(campaign, {"gopher"})
+        item = self.claim(campaign)[2]
+        campaign.update(item, full_flash=r.compare_score(1000000, REFERENCES["gopher"]), stage="baseline")
+        progress = json.loads(cluster.export_report(campaign, "a").read_text())["games"]["gopher"]
+        self.assertEqual(progress["successful_pairs"], 0)
+        self.assertEqual(progress["successful_pair_seeds"], [])
+        self.assertEqual(progress["pending_full_flash"], [dict(seed=item["seed"], score=1000000)])
+
+    def test_pending_results_already_in_completed_pairs_are_not_counted_twice(self):
+        campaign = self.server("a")
+        self.finish_others(campaign, {"gopher"})
+        item = self.claim(campaign)[2]
+        self.report("c", "gopher", seeds=[3130], pending=[(3130, 1000000), (3140, 1000000), (3150, 1000000)])
+        campaign.update(item, full_flash=r.compare_score(1000000, REFERENCES["gopher"]), stage="baseline")
+        progress = r.game_progress(campaign.read())["gopher"]
+        self.assertEqual(progress["successful_pairs"], 1)
+        self.assertEqual(len(progress["pending_full_flash"]), 3)
+        self.assertNotIn(3130, progress["pending_full_flash"])
+        self.assertEqual(r.selected_pending_seeds(progress), {item["seed"], 3140, 3150})
+        campaign.check_cancellation(item)
+
+    def test_partial_report_during_sync_does_not_interrupt_local_training(self):
+        campaign = self.server("a")
+        self.finish_others(campaign, {"gopher"})
+        item = self.claim(campaign)[2]
+        path = self.root / "reproduction/reports/c.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"version": 1,')
+        campaign.check_cancellation(item)
 
     def test_status_projects_shared_assignment_without_writing_state(self):
         campaign = self.server("a")

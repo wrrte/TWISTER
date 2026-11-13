@@ -234,6 +234,15 @@ interrupted. Its checkpoint is hard-linked into the baseline directory and
 `training_source.json` records its origin. No rolling pre-warmup snapshot is maintained; see the
 [measured recovery costs](reproduction/warmup_fallback_cost.md).
 
+To manage CPU contention without restarting current training, run one optional
+monitor in another terminal: `python reproduction_cpu_guard.py`. It pauses slow
+training process groups at <= 1.30 it/s, waits a random 5–30 seconds, then resumes
+one group when system CPU utilization is <= 80%; failed checks repeat every 30
+seconds. Startup/resume grace, sustained slowdown checks and staggered changes
+avoid reacting to single slow steps. Use `--max-running 4` for an additional
+four-training cap, or `--dry-run --once` to inspect discovery without signaling.
+See [CPU guard usage](reproduction/README.md#cpu-부하에-따른-학습-자동-정지재개).
+
 Offline scheduler, gate, retention and handoff tests:
 `python -m unittest discover -s reproduction -p 'test_*.py' -v`.
 

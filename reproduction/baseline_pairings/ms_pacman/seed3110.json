@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "kind": "reused_baseline_cross_seed",
+  "game": "ms_pacman",
+  "full_flash_seed": 3110,
+  "full_flash_score": 1808.2,
+  "baseline": {
+    "seed": 9997,
+    "score": 2479.6,
+    "enabled": true,
+    "run_ids": [
+      "n2tvweww"
+    ],
+    "run_names": [
+      "callbacks/ms_pacman_seed9997/atari100k-ms_pacman"
+    ],
+    "run_urls": [
+      "https://wandb.ai/choemj-kaist/nnet/runs/n2tvweww"
+    ]
+  },
+  "gate": {
+    "accepted": true,
+    "individual_passes": true,
+    "mean_passes": false,
+    "previous_pair_seeds": [
+      3090,
+      3100
+    ],
+    "mean_score": 2087.366666666667,
+    "mean_hns": 0.26792575871582647,
+    "minimum_mean_score": 2870.5
+  },
+  "search_id": "search_55ef5d85540b44deb4e3af0ae3b0ecc8",
+  "server": "b"
+}

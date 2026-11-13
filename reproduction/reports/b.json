@@ -3,7 +3,7 @@
   "server": "b",
   "search_id": "search_55ef5d85540b44deb4e3af0ae3b0ecc8",
   "round": 4,
-  "updated_at": "2026-11-13T01:28:12+00:00",
+  "updated_at": "2026-11-13T01:29:36+00:00",
   "games": {
     "frostbite": {
       "attempts": 3,
@@ -324,13 +324,13 @@
       ]
     },
     "up_n_down": {
-      "attempts": 1,
+      "attempts": 2,
       "completed": 1,
       "successful_pairs": 1,
       "latest": {
-        "seed": 3090,
-        "status": "complete",
-        "stage": null
+        "seed": 3100,
+        "status": "running",
+        "stage": "warmup"
       },
       "top": [
         {

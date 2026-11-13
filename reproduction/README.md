@@ -29,9 +29,34 @@ baseline은 다음 중 하나만 만족하면 실행합니다.
 
 평균은 상위 4개 보관 여부와 관계없이 모든 완료 쌍을 포함합니다. baseline이 없는
 시드, 다른 게임, baseline 점수는 제외합니다. 판정 시 사용한 시드·평균과 통과
-사유를 trial의 `baseline_gate`에 저장하므로 재개해도 같은 판정을 사용합니다.
+사유를 trial의 `baseline_gate`에 저장합니다. 통과한 판정은 재개할 때 유지하며,
+과거에 탈락한 판정은 새로운 완료 쌍이 생기면 다시 계산합니다.
 산출물은 현재 서버에서 full FLASH 점수 상위 4개를 보관하되, 이번 시드의
 조건부 baseline이 끝나기 전에 warmup을 삭제하지 않습니다.
+
+## 과거에 건너뛴 baseline 다시 실행
+
+게임이 쉬는 시점마다, 새 시드를 시작하기 전에 baseline이 없는 기존 full FLASH
+결과를 점수가 높은 순서로 검사합니다. 새로 완료한 쌍 덕분에 조건 2를 만족하게
+되었다면, 필요한 파일이 있는 가장 높은 점수의 시드부터 baseline을 실행합니다.
+새 worker를 시작했을 때도 기존 탈락 기록을 재검사하므로 이전 코드에서 건너뛴
+시드도 대상입니다. 추가 옵션이나 수동 재검사 명령은 필요하지 않습니다.
+
+- 기존 full FLASH 점수와 시드는 그대로 유지하며 시도 횟수를 늘리지 않습니다.
+- 원래 shared warmup의 checkpoint, optimizer·RNG, replay 파일과 run/config 정보가
+  있으면 그 warmup에서 OFF 분기만 실행합니다. ON 최종 가중치를 OFF 초기값으로
+  사용하지 않습니다.
+- 전체 예산을 학습한 호환되는 OFF warmup이 남아 있으면 추가 학습 없이 평가합니다.
+- 파일이 없거나 호환되지 않으면 사유를 기록하고 다음 후보를 확인합니다. 과거
+  warmup/full FLASH를 처음부터 다시 학습하지 않습니다.
+- 하나를 완료할 때마다 완료 쌍 전체의 평균을 다시 계산합니다. 다음 후보도
+  통과하면 이어서 처리하고, 성공 쌍이 4개가 되는 즉시 종료합니다.
+- 지금 복구할 수 있는 후보는 처리 전에 상위 4개 정리로 삭제하지 않습니다.
+  따라서 복구를 기다리는 동안 보관 디렉터리가 일시적으로 4개를 넘을 수 있습니다.
+
+서버 이관 기록에는 점수·시드만 포함됩니다. 예전 서버에만 있는 checkpoint는
+새 서버에서 자동으로 읽을 수 없으며, 원래 trial 디렉터리와 참조 replay 경로가
+현재 서버에서도 접근 가능할 때만 복구합니다. 숫자 기록만 있는 경우는 건너뜁니다.
 
 ## 기존 B/C 배정 변경 적용
 
@@ -56,12 +81,14 @@ B에서 더 진행했다면 handoff에 포함된 실제 이력 이후의 시드�
 
    ```bash
    python reproduction_cluster.py handoff
-   git add reproduce.py reproduction_cluster.py reproduction_seeds.py README.md reproduction/README.md reproduction/servers.json reproduction/seed_reservations.json reproduction/test_reproduction.py reproduction/handoffs
+   git add reproduce.py reproduction_cluster.py reproduction_seeds.py reproduction_recovery.py README.md reproduction/README.md reproduction/servers.json reproduction/seed_reservations.json reproduction/test_reproduction.py reproduction/handoffs
    git commit -m "Update reproduction gates and reassign B/C games"
    git push
    ```
 
-2. **B에서** 기존 worker들을 종료한 뒤 최신 코드와 C의 숫자 이력을 받습니다.
+2. **B에서 Gopher worker만 종료**한 뒤 최신 코드와 C의 숫자 이력을 받습니다.
+   다른 게임의 worker는 현재 실험을 계속 진행해도 됩니다. `handoff`는 넘기는
+   Gopher의 lease만 확인하며, 이관 후에도 다른 게임의 진행 기록/잠금은 유지합니다.
    가능하면 진행 중인 Gopher trial을 마친 뒤 종료하세요. 중단된 채 넘겨도
    기존 파일은 보존하며, 그 시드는 C에서 다시 배정하지 않습니다.
 
@@ -72,8 +99,10 @@ B에서 더 진행했다면 handoff에 포함된 실제 이력 이후의 시드�
    ```
 
    `sync`는 B의 Gopher 이력을 커밋·push하고, B에 Road Runner와 Up N Down을
-   반영합니다. 이후 GPU별 기존 터미널에서 각각 `./0_train.sh`부터
-   `./3_train.sh`까지 다시 실행합니다.
+   반영합니다. 종료한 Gopher worker의 GPU에서 해당 `N_train.sh`를 다시 실행하면
+   새 담당 게임을 가져옵니다. 나머지 worker는 현재 trial을 마친 뒤 하나씩
+   재시작하면 새 baseline 조건·과거 baseline 재검사가 적용됩니다. 이미 실행 중인
+   Python worker의 코드는 자동 교체되지 않습니다.
 
 3. **C에서** B가 공개한 Gopher 이력을 받아 배정을 적용하고 재시작합니다.
 
@@ -88,8 +117,9 @@ B에서 더 진행했다면 handoff에 포함된 실제 이력 이후의 시드�
    상대 서버의 handoff 파일이 없으면 학습 시작 전에 필요한 서버/명령을
    안내하고 종료하므로, 오래된 보고서만 보고 시드를 다시 시작하지 않습니다.
 
-4. **A에서도** `git pull --rebase` 후 기존 worker를 재시작해야 새 baseline 조건과
-   누적 4쌍 종료 기준이 적용됩니다. A의 게임 배정은 동일합니다.
+4. **A에서도** `git pull --rebase` 후 현재 trial을 마친 worker부터 하나씩 재시작하면
+   새 조건과 과거 baseline 재검사, 누적 4쌍 종료 기준이 적용됩니다.
+   A의 게임 배정은 동일합니다.
 
 학습 없이 검증하려면:
 

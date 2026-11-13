@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "702da3a5d4e9446fbd5f2eb984baff81",
+  "game": "up_n_down",
+  "source": "c",
+  "target": "b",
+  "search_id": "search_c7a15c343a18433ba72f14ac26630fea",
+  "reference": [
+    533,
+    11693,
+    7068
+  ],
+  "trials": [
+    {
+      "game": "up_n_down",
+      "seed": 3090,
+      "round": 1,
+      "status": "complete",
+      "retained": false,
+      "full_flash": {
+        "score": 13402.9,
+        "hns": 1.1532168458781362,
+        "paper_hns": 0.5855734767025089,
+        "delta_hns": 0.5676433691756272,
+        "minimum_score": 5952.0,
+        "passes": true
+      },
+      "baseline": {
+        "metrics": {
+          "score": 13376.3
+        }
+      }
+    }
+  ],
+  "reserved_seeds": [
+    3090
+  ]
+}

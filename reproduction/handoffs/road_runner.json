@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "id": "4d52c9cebf144485a83c23e30481e256",
+  "game": "road_runner",
+  "source": "c",
+  "target": "b",
+  "search_id": "search_c7a15c343a18433ba72f14ac26630fea",
+  "reference": [
+    12,
+    7845,
+    17832
+  ],
+  "trials": [
+    {
+      "game": "road_runner",
+      "seed": 3090,
+      "round": 1,
+      "status": "complete",
+      "retained": false,
+      "full_flash": {
+        "score": 18303.0,
+        "hns": 2.3351206434316354,
+        "paper_hns": 2.2749904251244732,
+        "delta_hns": 0.06013021830716201,
+        "minimum_score": 17048.7,
+        "passes": true
+      },
+      "baseline": {
+        "metrics": {
+          "score": 17550.0
+        }
+      }
+    },
+    {
+      "game": "road_runner",
+      "seed": 3100,
+      "round": 2,
+      "status": "complete",
+      "retained": false,
+      "full_flash": {
+        "score": 32661.0,
+        "hns": 4.168134814247415,
+        "paper_hns": 2.2749904251244732,
+        "delta_hns": 1.8931443891229414,
+        "minimum_score": 17048.7,
+        "passes": true
+      },
+      "baseline": {
+        "metrics": {
+          "score": 28310.0
+        }
+      }
+    }
+  ],
+  "reserved_seeds": [
+    3090,
+    3100,
+    9998,
+    9999
+  ]
+}

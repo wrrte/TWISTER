@@ -61,6 +61,7 @@ def compare_score(score, reference):
 
 def retained_trials(state, game):
     return sorted((trial for trial in state["trials"] if trial["game"] == game
+                   and not trial.get("imported_from")
                    and trial["retained"] and trial["full_flash"] is not None),
                   key=lambda trial: (-trial["full_flash"]["score"], trial["round"]))
 
@@ -75,8 +76,11 @@ def successful_trials(state, game):
 
 def game_trials(state, game):
     trials = [trial for trial in state["trials"] if trial["game"] == game]
-    history = state.get("imported_history", {}).get(game, [])
-    return trials + history
+    history = (state.get("imported_history", {}).get(game, [])
+               + state.get("released_trials", {}).get(game, []))
+    by_seed = {trial["seed"]: trial for trial in history}
+    by_seed.update({trial["seed"]: trial for trial in trials})
+    return list(by_seed.values())
 
 
 def baseline_gate(state, trial):
@@ -109,12 +113,15 @@ def next_seed(state, game):
 
 
 def artifact_dir(state, trial):
-    return ROOT / "callbacks" / "reproduction" / state["search_id"] / trial["game"] / f"round_{trial['round']:06d}"
+    search_id = trial.get("artifact_search_id", state["search_id"])
+    if not search_id.startswith("search_") or not search_id[7:].isalnum():
+        raise ValueError("Invalid artifact search ID")
+    return ROOT / "callbacks" / "reproduction" / search_id / trial["game"] / f"round_{trial['round']:06d}"
 
 
 def identity(state, trial):
     return {key: value for key, value in (
-        ("search_id", state["search_id"]), ("game", trial["game"]),
+        ("search_id", trial.get("artifact_search_id", state["search_id"])), ("game", trial["game"]),
         ("round", trial["round"]), ("seed", trial["seed"]))}
 
 
@@ -125,6 +132,17 @@ def trial_paths(state, trial):
     branches = {name: ROOT / "callbacks" / (str(run) + suffix) / environment
                 for name, suffix in (("warmup", "_warmup"), ("full_flash", "_O"), ("baseline", "_X"))}
     return directory, str(run), branches
+
+
+def historical_baselines(state, game):
+    if len(successful_trials(state, game)) >= KEEP:
+        return []
+    # Imported records are usable only if their original artifacts are also
+    # accessible here. Numeric history alone never starts fresh training.
+    return sorted((trial for trial in state["trials"] if trial["game"] == game
+                   and trial["status"] == "complete" and trial["full_flash"] is not None
+                   and trial["baseline"] is None),
+                  key=lambda trial: (-trial["full_flash"]["score"], trial["round"]))
 
 
 class Campaign:
@@ -197,7 +215,19 @@ class Campaign:
 
     def _cleanup(self, state):
         for trial in state["trials"]:
-            if trial["game"] not in state["config"]["games"] or not trial.get("cleanup_pending"):
+            if (trial.get("imported_from") or trial["game"] not in state["config"]["games"]
+                    or not trial.get("cleanup_pending")):
+                continue
+            if any(item["game"] == trial["game"] and item["status"] != "complete"
+                   for item in state["trials"]):
+                # Finish the new pair before deciding whether its high score
+                # makes a pending historical baseline usable.
+                continue
+            # An old deletion intent may predate a newly qualifying mean.
+            if self._recoverable(state, trial):
+                trial.update(cleanup_pending=False, retained=True)
+                trial.pop("cleanup_started", None)
+                write_json(self.path, state)
                 continue
             directory = artifact_dir(state, trial)
             if directory.is_symlink() or directory.resolve() != directory:
@@ -216,6 +246,48 @@ class Campaign:
             trial["cleanup_pending"] = False
             write_json(self.path, state)
 
+    def _recoverable(self, state, trial):
+        if (trial["status"] != "complete" or trial["full_flash"] is None
+                or trial["baseline"] is not None
+                or len(successful_trials(state, trial["game"])) >= KEEP
+                or not baseline_gate(state, trial)["accepted"]):
+            return False
+        from reproduction_recovery import available_baseline_source
+        source, _ = available_baseline_source(state, trial)
+        return source is not None
+
+    def _claim_historical(self, state, game):
+        from reproduction_recovery import available_baseline_source
+
+        for trial in historical_baselines(state, game):
+            gate = baseline_gate(state, trial)
+            if not gate["accepted"]:
+                # All remaining scores are lower under the same paired mean.
+                break
+            source, reason = available_baseline_source(state, trial)
+            if source is None:
+                skipped = dict(reason=reason, previous_pair_seeds=gate["previous_pair_seeds"])
+                if trial.get("baseline_recovery_skipped") != skipped:
+                    trial["baseline_recovery_skipped"] = skipped
+                    write_json(self.path, state)
+                    print(f"{game} seed {trial['seed']}: skipping historical baseline: {reason}", flush=True)
+                continue
+            lease = self._lease(trial)
+            if lease is None:
+                continue
+            old_gate = trial.get("baseline_gate")
+            if old_gate is not None and old_gate != gate:
+                trial.setdefault("baseline_gate_history", []).append(old_gate)
+            trial.update(baseline_gate=gate, baseline_recovery=source, status="running", stage="baseline",
+                         worker=f"{socket.gethostname()}:{os.getpid()}", error=None, cleanup_pending=False)
+            if not trial.get("imported_from"):
+                trial["retained"] = True
+            trial.pop("cleanup_started", None)
+            write_json(self.path, state)
+            print(f"{game} seed {trial['seed']}: resuming historical baseline from saved {source['mode']}", flush=True)
+            return "trial", state, dict(trial), lease
+        return None
+
     def claim(self):
         with self.locked():
             state = self.read()
@@ -231,7 +303,8 @@ class Campaign:
             # cannot let another GPU reuse this trial while training is alive.
             active_games = set()
             for trial in state["trials"]:
-                if trial["game"] in state["config"]["games"] and trial["status"] != "complete":
+                if (trial["game"] in state["config"]["games"] and trial["status"] != "complete"
+                        and len(successful_trials(state, trial["game"])) < KEEP):
                     active_games.add(trial["game"])
                     lease = self._lease(trial)
                     if lease is not None:
@@ -248,9 +321,18 @@ class Campaign:
             # Prioritize idle Gopher until its first successful ON/OFF pair.
             # Otherwise prefer fewer attempts, then the configured game order.
             attempts = {game: len(game_trials(state, game)) for game in ready}
-            game = min(ready, key=lambda game: (
+            ordered = sorted(ready, key=lambda game: (
                 not (game == "gopher" and not successful_trials(state, game)),
                 attempts[game]))
+            for game in ordered:
+                recovered = self._claim_historical(state, game)
+                if recovered is not None:
+                    return recovered
+                # Preserve Gopher's first-pair priority even when another
+                # game's historical baseline is available.
+                if game == "gopher" and not successful_trials(state, game):
+                    break
+            game = ordered[0]
             # Keep legacy artifact/lease round numbers unique, even for games
             # assigned late under the old server-wide round counter.
             round_number = 1 + max((trial["round"] for trial in game_trials(state, game)), default=0)
@@ -276,7 +358,8 @@ class Campaign:
             # gate. Keep its shared warmup until its baseline has finished.
             if saved["status"] == "complete":
                 for loser in retained_trials(state, trial["game"])[KEEP:]:
-                    loser.update(retained=False, cleanup_pending=True)
+                    if not self._recoverable(state, loser):
+                        loser.update(retained=False, cleanup_pending=True)
             # Persist the numeric result and deletion intent before removing data.
             write_json(self.path, state)
             self._cleanup(state)
@@ -287,8 +370,12 @@ class Campaign:
             state = self.read()
             saved = next(item for item in state["trials"]
                          if (item["game"], item["round"]) == (trial["game"], trial["round"]))
-            if "baseline_gate" not in saved:
-                saved["baseline_gate"] = baseline_gate(state, saved)
+            old_gate = saved.get("baseline_gate")
+            if old_gate is None or not old_gate["accepted"]:
+                gate = baseline_gate(state, saved)
+                if old_gate is not None and old_gate != gate:
+                    saved.setdefault("baseline_gate_history", []).append(old_gate)
+                saved["baseline_gate"] = gate
                 write_json(self.path, state)
             return dict(saved)
 
@@ -420,6 +507,17 @@ def run_trial(campaign, state, trial, lease):
                        override_config=json.dumps(state["config"]["override_config"]),
                        WANDB_DIR=str(directory))
     python = state["config"]["python"]
+    if trial.get("baseline_recovery") and trial["baseline"] is None:
+        from reproduction_recovery import available_baseline_source
+        source, reason = available_baseline_source(state, trial)
+        if source is None:
+            campaign.update(trial, status="complete", stage="done", error=None,
+                            baseline_recovery_skipped=dict(reason=reason))
+            print(f"{trial['game']} seed {trial['seed']}: saved baseline resources are unavailable: {reason}", flush=True)
+            return
+        if source["mode"] == "evaluate_warmup":
+            fallback = dict(trial.get("warmup_fallback", {}), baseline_candidate=source["candidate"])
+            trial = campaign.update(trial, warmup_fallback=fallback)
     if trial["full_flash"] is None:
         directory.mkdir(parents=True, exist_ok=True)
         marker = directory / MARKER

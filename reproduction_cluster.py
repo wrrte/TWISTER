@@ -106,6 +106,33 @@ def apply_assignment(state, plan=None):
         reserved = set(state.get("reserved_seeds", {}).get(game, ())) | set(snapshot["reserved_seeds"])
         state.setdefault("reserved_seeds", {})[game] = sorted(reserved)
         changed = True
+    # Keep the active trial table readable by workers already running older
+    # code. They finish their current unrelated game without being interrupted.
+    for game in state.get("released_games", {}):
+        departing = [trial for trial in state["trials"] if trial["game"] == game]
+        if departing:
+            existing = state.setdefault("released_trials", {}).get(game, [])
+            by_seed = {trial["seed"]: trial for trial in existing + departing}
+            state["released_trials"][game] = list(by_seed.values())
+            state["trials"] = [trial for trial in state["trials"] if trial["game"] != game]
+            changed = True
+    for game in list(state.get("imported_history", {})):
+        if game not in games:
+            continue
+        move = handoffs[game]
+        snapshot = json.loads(handoff_path(game).read_text(encoding="utf-8"))
+        existing = {trial["seed"] for trial in state["trials"] if trial["game"] == game}
+        for record in state["imported_history"][game]:
+            if record["seed"] in existing:
+                continue
+            record = dict(record, imported_from=move["source"], artifact_search_id=snapshot["search_id"],
+                          source_status=record["status"], status="complete",
+                          retained=record["full_flash"] is not None)
+            if record["source_status"] != "complete":
+                record["baseline"] = None
+            state["trials"].append(record)
+        del state["imported_history"][game]
+        changed = True
     state["config"]["games"] = list(games)
     table = reproduce.references()
     for game in games:
@@ -117,7 +144,9 @@ def validate_handoff(snapshot, game, move):
     if (snapshot.get("version") != 1 or snapshot.get("game") != game
             or snapshot.get("source") != move["source"] or snapshot.get("target") != move["target"]
             or not isinstance(snapshot.get("id"), str) or not snapshot["id"]
-            or snapshot.get("reference") != reproduce.references()[game]):
+            or snapshot.get("reference") != reproduce.references()[game]
+            or not isinstance(snapshot.get("search_id"), str)
+            or not snapshot["search_id"].startswith("search_") or not snapshot["search_id"][7:].isalnum()):
         raise ValueError(f"Invalid numeric history handoff for {game}")
     seeds = set()
     for trial in snapshot["trials"]:
@@ -326,7 +355,10 @@ def export_report(campaign, server):
             top = sorted((trial for trial in trials if trial["full_flash"] is not None),
                          key=lambda trial: (-trial["full_flash"]["score"], trial["round"]))[:reproduce.KEEP]
             games[game] = dict(
-                attempts=len(trials), completed=sum(trial["status"] == "complete" for trial in trials),
+                attempts=len(trials), completed=sum(
+                    trial["status"] == "complete" and
+                    (trial.get("source_status", "complete") == "complete" or trial["baseline"] is not None)
+                    for trial in trials),
                 successful_pairs=len(reproduce.successful_trials(state, game)),
                 latest={key: trials[-1].get(key) for key in ("seed", "status", "stage")} if trials else None,
                 top=[dict(seed=trial["seed"], score=trial["full_flash"]["score"],

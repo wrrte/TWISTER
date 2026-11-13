@@ -112,7 +112,16 @@ final evaluation (100 episodes by default). Start baseline (retrieval OFF) from
 
 Unpaired results and baseline scores are excluded from that mean. Pruned pairs
 and numeric history transferred from another server are included. The gate is
-saved before baseline starts and reused after an interruption.
+saved before baseline starts and reused after an interruption. A previously
+rejected gate is reconsidered when more pairs have completed.
+
+Before starting a new seed, idle workers revisit skipped baselines in descending
+full FLASH score order. If the current paired mean now qualifies a seed and its
+original warmup checkpoint, optimizer/RNG state, replay files and run settings
+are available, the worker runs only OFF from that warmup. A compatible full-budget
+OFF warmup is evaluated directly. Missing resources are reported and skipped;
+recovery never retrains full FLASH or an unavailable historical warmup. Each
+completed recovered pair updates the mean before the next candidate is checked.
 This is an absolute HNS margin of 0.1, not 10% of the paper score. Reference
 values come from `REFERENCE_SCORES` in `results/convert_csv_to_excel.py` and are
 saved with the search settings. A game stops immediately after **four completed
@@ -141,6 +150,9 @@ can temporarily be a fifth directory while it trains. Numeric results remain in
 the state file after pruning and still count toward the mean and stopping rule.
 Existing runs outside this search are untouched. Released games' original
 artifacts stay on their source server; handoffs transfer numeric history only.
+Recoverable skipped baselines are temporarily protected from pruning until they
+are processed or stop qualifying. Imported trials can be recovered only when
+their original artifacts and referenced replay files are accessible locally.
 
 State defaults to `results/reproduction/state.json`; artifacts are grouped under
 `callbacks/reproduction/<search_id>/<game>/round_<N>/`. Each retained round's

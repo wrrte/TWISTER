@@ -80,7 +80,8 @@ The seed controls randomness; CUDA operations can still be nondeterministic.
 
 For three independent servers with 4/4/1 GPUs and daily Git exchange, see
 [multi-server setup and daily sync](reproduction/README.md). Each server runs
-its own rounds and owns a distinct game subset; weights/replay stay local.
+its own rounds and owns a distinct game subset. Gopher and Krull are also
+available on every server and GPU; weights/replay stay local.
 
 `0_train.sh` through `7_train.sh` run GPU workers for a shared reproduction search.
 Use a Python environment with the TWISTER dependencies and Atari ROMs:
@@ -91,13 +92,15 @@ Use a Python environment with the TWISTER dependencies and Atari ROMs:
 ./6_train.sh
 ```
 
-Until Gopher has its first qualifying full FLASH result and completed baseline,
-workers give idle Gopher priority. Otherwise they prefer unfinished, idle games
-with the fewest previous attempts, using the configured game order to break ties.
+All games have the same priority: workers prefer unfinished games with the
+fewest previous attempts, using configured game order to break ties.
+Gopher and Krull can run different seeds on several GPUs at once. Other games
+have at most one active trial, including its conditional baseline.
 Each game's seeds advance in steps of 10 from 3090, skipping existing local,
-transferred and Excel-reserved seeds. Completed games can start
+transferred and Excel-reserved seeds. Cluster Gopher uses offsets A=1, B=2,
+C=0; Krull uses A=1, B=0, C=2. Each owner keeps its existing seed stream, while
+other servers use distinct residues modulo 10. Completed games can start
 their next seed while other games are still finishing their first.
-One game has at most one active trial, including its conditional baseline.
 The reported round is the highest trial round started on this server; games can
 be in different rounds. Multiple workers share locks across GPU models.
 
@@ -128,6 +131,22 @@ saved with the search settings. A game stops immediately after **four completed
 ON/OFF pairs in total**, including mean-qualified pairs and pruned historical
 pairs. Baseline score does not affect qualification or ranking. The top-four
 artifact policy is independent of this cumulative stopping count.
+
+For each shared game, the four-pair goal combines live local results with other
+servers' last Git-synced reports. The reports include completed pair seeds to
+deduplicate history; released source copies count at their handoff receiver.
+Old reports without seed lists contribute only from the current game owner.
+Each server reserves slots for its local in-flight trials. Once the combined
+count reaches four, no new trials or historical baselines are claimed for that
+game; in-flight shared trials finish normally. Stale reports can allow more
+than four pairs to finish before the next sync. Baseline gates continue to use
+the server's local and transferred history, and top-four artifact retention
+remains local to each server.
+
+When deploying shared-game scheduling, stop all old workers on each server
+before starting its new workers. Older workers can mistake new shared Gopher
+trials for outgoing handoff history. Existing state and artifacts are reused;
+no reset is needed.
 
 If shared warmup cannot reach completed episode boundaries before the training
 budget ends, the worker trains full FLASH from step zero with the same seed.

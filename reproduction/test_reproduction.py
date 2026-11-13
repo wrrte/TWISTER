@@ -1,6 +1,8 @@
 """Scheduler and handoff regressions; no CUDA, training, Git or network calls."""
 
 import copy
+from contextlib import redirect_stdout
+import io
 import json
 from pathlib import Path
 import sys
@@ -185,10 +187,15 @@ class CampaignTests(WorkspaceTests):
 class WorkbookTests(unittest.TestCase):
     @unittest.skipUnless((REAL_ROOT / "results/performance_twister.xlsx").is_file(), "Excel export is local-only")
     def test_real_workbook_reserves_legacy_running_and_finished_gopher_seeds(self):
-        seeds = workbook_seeds(REAL_ROOT / "results/performance_twister.xlsx")["gopher"]
+        workbook = workbook_seeds(REAL_ROOT / "results/performance_twister.xlsx")["gopher"]
+        seeds = occupied_seeds(REAL_ROOT)["gopher"]
+        self.assertTrue(workbook.issubset(seeds))
         self.assertTrue({3090, 3100, 3110, 3120, 9997}.issubset(seeds))
         saved = state([])
-        self.assertEqual(r.next_seed(saved, "gopher"), 3130)
+        seed = r.next_seed(saved, "gopher")
+        self.assertGreaterEqual(seed, 3130)
+        self.assertNotIn(seed, seeds)
+        self.assertEqual((seed - 3090) % 10, 0)
         saved["config"]["start_seed"] = 9997
         saved["config"]["seed_step"] = 1
         self.assertEqual(r.next_seed(saved, "gopher"), 9998)
@@ -411,7 +418,11 @@ class RecoveryTests(WorkspaceTests):
 class HandoffTests(WorkspaceTests):
     def setUp(self):
         super().setUp()
-        write_json(cluster.plan_path(), PLAN)
+        # Keep testing the original single-owner handoff independently of the
+        # shared-game overlay, which has its own integration checks below.
+        plan = copy.deepcopy(PLAN)
+        plan.pop("shared_games", None)
+        write_json(cluster.plan_path(), plan)
         self.b = r.Campaign(self.root / "b.json")
         self.c = r.Campaign(self.root / "c.json")
         old_b = [game for game in PLAN["servers"]["b"]["games"] if game not in {"road_runner", "up_n_down"}] + ["gopher"]
@@ -527,6 +538,221 @@ class HandoffTests(WorkspaceTests):
         write_json(path, snapshot)
         with self.assertRaisesRegex(ValueError, "duplicate seed"):
             cluster.attach_server(self.c, "c")
+
+
+class SharedGamesTests(WorkspaceTests):
+    def setUp(self):
+        super().setUp()
+        write_json(cluster.plan_path(), PLAN)
+        for source in (REAL_ROOT / "reproduction/handoffs").glob("*.json"):
+            target = cluster.handoff_path(source.stem)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+
+    def server(self, name):
+        campaign = r.Campaign(self.root / f"{name}.json")
+        saved = state([], list(PLAN["servers"][name]["games"]))
+        saved["search_id"] = "search_" + name
+        saved["config"].update(server=name, references=copy.deepcopy(REFERENCES))
+        write_json(campaign.path, saved)
+        cluster.attach_server(campaign, name)
+        return campaign
+
+    def claim(self, campaign):
+        result = campaign.claim()
+        if result[3] is not None:
+            self.addCleanup(result[3].close)
+        return result
+
+    def pair(self, campaign, game, seed):
+        saved = campaign.read()
+        number = 1 + max((item["round"] for item in r.game_trials(saved, game)), default=0)
+        saved["trials"].append(trial(seed, 1000000, 1, game=game, round_number=number,
+                                    reference=REFERENCES[game]))
+        write_json(campaign.path, saved)
+
+    def finish_others(self, campaign, remaining):
+        for game in campaign.read()["config"]["games"]:
+            if game not in remaining:
+                for seed in (5000, 5010, 5020, 5030):
+                    self.pair(campaign, game, seed)
+
+    def report(self, server, game, seeds=None, count=0):
+        progress = dict(successful_pairs=count if seeds is None else len(seeds))
+        if seeds is not None:
+            progress["successful_pair_seeds"] = seeds
+        write_json(self.root / "reproduction/reports" / f"{server}.json",
+                   dict(version=1, server=server, games={game: progress}))
+
+    def test_every_server_includes_both_shared_games_once(self):
+        for name in PLAN["servers"]:
+            campaign = self.server(name)
+            games = campaign.read()["config"]["games"]
+            for game in ("gopher", "krull"):
+                self.assertEqual(games.count(game), 1)
+            self.assertEqual(set(games) - {"gopher", "krull"},
+                             set(PLAN["servers"][name]["games"]) - {"gopher", "krull"})
+            self.assertFalse(cluster.apply_assignment(campaign.read()))
+
+    def test_shared_games_have_normal_priority(self):
+        saved = self.save([])
+        saved["config"]["games"] = ["alien", "gopher", "krull"]
+        saved["config"]["references"] = copy.deepcopy(REFERENCES)
+        write_json(self.campaign.path, saved)
+        self.assertEqual([self.claim(self.campaign)[2]["game"] for _ in range(3)],
+                         ["alien", "gopher", "krull"])
+
+    def test_both_games_allow_four_concurrent_distinct_trials(self):
+        for game in ("gopher", "krull"):
+            with self.subTest(game=game):
+                campaign = r.Campaign(self.root / f"parallel_{game}.json")
+                saved = state([], [game])
+                saved["config"]["references"] = copy.deepcopy(REFERENCES)
+                write_json(campaign.path, saved)
+                trials = [self.claim(campaign)[2] for _ in range(4)]
+                self.assertEqual([item["seed"] for item in trials], [3090, 3100, 3110, 3120])
+                self.assertEqual(len({item["round"] for item in trials}), 4)
+                self.assertEqual(self.claim(campaign)[0], "wait")
+                campaign.update(trials[0], status="complete", full_flash=r.compare_score(0, (0, 100, 100)))
+                self.assertEqual(self.claim(campaign)[2]["seed"], 3130)
+
+    def test_other_games_remain_serial(self):
+        saved = self.save([])
+        saved["config"].update(games=["alien"], references=copy.deepcopy(REFERENCES))
+        write_json(self.campaign.path, saved)
+        self.assertEqual(self.claim(self.campaign)[0], "trial")
+        self.assertEqual(self.claim(self.campaign)[0], "wait")
+
+    def test_server_seed_streams_preserve_owner_and_avoid_overlap(self):
+        expected = {"gopher": {"a": 3091, "b": 3092, "c": 3130},
+                    "krull": {"a": 3091, "b": 3090, "c": 3092}}
+        for game in expected:
+            seeds = []
+            for name in PLAN["servers"]:
+                saved = self.server(name).read()
+                seed = r.next_seed(saved, game)
+                self.assertEqual(seed, expected[game][name])
+                seeds.extend([seed, seed + saved["config"]["seed_step"]])
+            self.assertEqual(len(seeds), len(set(seeds)))
+
+    def test_owner_seed_stream_skips_manifest_and_workbook_reservations(self):
+        campaign = self.server("b")
+        with mock.patch("reproduction_seeds.occupied_seeds", return_value={"krull": {3090, 3100, 3110}}):
+            self.assertEqual(r.next_seed(campaign.read(), "krull"), 3120)
+
+    def test_global_pair_goals_are_independent_and_ignore_own_stale_report(self):
+        campaign = self.server("a")
+        self.finish_others(campaign, {"gopher", "krull"})
+        self.report("a", "gopher", count=100)
+        self.report("c", "gopher", seeds=[3130, 3140, 3150, 3160])
+        self.report("b", "krull", seeds=[3090, 3100, 3110, 3120])
+        counts = r.successful_pair_counts(campaign.read())
+        self.assertEqual((counts["gopher"], counts["krull"]), (4, 4))
+        self.assertEqual(self.claim(campaign)[0], "done")
+
+    def test_global_goal_for_one_game_leaves_other_games_available(self):
+        campaign = self.server("a")
+        self.finish_others(campaign, {"gopher", "krull"})
+        self.report("c", "gopher", seeds=[3130, 3140, 3150, 3160])
+        self.assertEqual(self.claim(campaign)[2]["game"], "krull")
+
+    def test_local_and_remote_pairs_reserve_remaining_slots_until_baseline_finishes(self):
+        campaign = self.server("a")
+        self.finish_others(campaign, {"krull"})
+        self.pair(campaign, "krull", 3091)
+        self.pair(campaign, "krull", 3101)
+        self.report("b", "krull", seeds=[3090])
+        item = self.claim(campaign)[2]
+        self.assertEqual(item["seed"], 3111)
+        campaign.update(item, stage="baseline", full_flash=r.compare_score(1000000, REFERENCES["krull"]))
+        self.assertEqual(r.successful_pair_counts(campaign.read())["krull"], 3)
+        self.assertEqual(self.claim(campaign)[0], "wait")
+        campaign.update(item, status="complete", baseline=dict(metrics=dict(score=1)))
+        self.assertEqual(self.claim(campaign)[0], "done")
+
+    def test_inflight_shared_trial_can_resume_after_remote_goal_is_met(self):
+        campaign = self.server("a")
+        self.finish_others(campaign, {"gopher"})
+        _, _, item, lease = self.claim(campaign)
+        self.report("c", "gopher", seeds=[3130, 3140, 3150, 3160])
+        self.assertEqual(self.claim(campaign)[0], "done")
+        campaign.update(item, status="interrupted")
+        lease.close()
+        self.assertEqual(self.claim(campaign)[2]["seed"], item["seed"])
+
+    def test_source_keeps_new_shared_trials_separate_from_released_history(self):
+        campaign = self.server("b")
+        saved = campaign.read()
+        snapshot = json.loads(cluster.handoff_path("gopher").read_text())
+        saved["search_id"] = snapshot["search_id"]
+        saved["released_games"] = {"gopher": snapshot["id"]}
+        saved["released_trials"] = {"gopher": [trial(3090, 1000000, 1, reference=REFERENCES["gopher"])]}
+        write_json(campaign.path, saved)
+        self.finish_others(campaign, {"gopher"})
+        _, _, item, _ = self.claim(campaign)
+        self.assertEqual(item["seed"], 3092)
+        self.assertTrue(item["shared_trial"])
+        cluster.attach_server(campaign, "b")
+        self.assertIn(item["seed"], [record["seed"] for record in campaign.read()["trials"] if record["game"] == "gopher"])
+        self.assertEqual(self.claim(campaign)[2]["seed"], 3102)
+        report = json.loads(cluster.export_report(campaign, "b").read_text())
+        self.assertEqual(report["games"]["gopher"]["successful_pair_seeds"], [])
+        self.assertEqual(report["games"]["gopher"]["successful_pairs"], 0)
+        original = cluster.handoff_path("gopher").read_bytes()
+        # Re-running the frozen handoff does not reserve or export new shared
+        # trials, including ones whose leases are held by live workers.
+        cluster.release_history(campaign, {"server": "b"})
+        self.assertEqual(cluster.handoff_path("gopher").read_bytes(), original)
+
+    def test_imported_pairs_and_old_source_report_are_not_counted_twice(self):
+        snapshot = json.loads(cluster.handoff_path("gopher").read_text())
+        snapshot["trials"][0]["baseline"] = dict(metrics=dict(score=1))
+        write_json(cluster.handoff_path("gopher"), snapshot)
+        campaign = self.server("c")
+        self.report("b", "gopher", count=1)
+        self.assertEqual(r.successful_pair_counts(campaign.read())["gopher"], 1)
+        exported = json.loads(cluster.export_report(campaign, "c").read_text())
+        self.assertEqual(exported["games"]["gopher"]["successful_pair_seeds"], [3090])
+        self.assertEqual(r.successful_pair_counts(self.server("a").read())["gopher"], 1)
+
+    def test_remote_pair_seed_lists_are_deduplicated(self):
+        campaign = self.server("a")
+        self.report("b", "gopher", seeds=[3090, 3092])
+        self.report("c", "gopher", seeds=[3090, 3130])
+        self.assertEqual(r.successful_pair_counts(campaign.read())["gopher"], 3)
+
+    def test_legacy_owner_counts_still_contribute(self):
+        campaign = self.server("a")
+        self.pair(campaign, "krull", 3091)
+        self.report("b", "krull", count=3)
+        self.assertEqual(r.successful_pair_counts(campaign.read())["krull"], 4)
+
+    def test_status_projects_shared_assignment_without_writing_state(self):
+        campaign = self.server("a")
+        saved = campaign.read()
+        saved["config"]["games"] = list(PLAN["servers"]["a"]["games"])
+        for key in ("shared_games", "shared_seed_offsets"):
+            saved["config"].pop(key)
+        write_json(campaign.path, saved)
+        original = campaign.path.read_bytes()
+        output = io.StringIO()
+        with redirect_stdout(output):
+            r.main(["--state", str(campaign.path), "--status"])
+        for game in ("gopher", "krull"):
+            self.assertIn(f"{game}: 0/4 successful pairs", output.getvalue())
+        self.assertEqual(campaign.path.read_bytes(), original)
+
+    def test_shared_games_cannot_be_moved(self):
+        for name, game in (("b", "krull"), ("c", "gopher")):
+            with self.assertRaisesRegex(ValueError, "Shared games"):
+                cluster.move_game(self.server(name), {"server": name}, game, "a")
+
+    def test_invalid_shared_game_plan_is_rejected(self):
+        plan = copy.deepcopy(PLAN)
+        plan["shared_games"] = ["gopher", "gopher"]
+        write_json(cluster.plan_path(), plan)
+        with self.assertRaisesRegex(ValueError, "Shared games"):
+            cluster.load_plan()
 
 
 if __name__ == "__main__":

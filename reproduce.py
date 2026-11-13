@@ -3,6 +3,7 @@
 
 import argparse
 import ast
+from collections import Counter
 from contextlib import contextmanager
 import fcntl
 import json
@@ -74,6 +75,22 @@ def successful_trials(state, game):
             and trial["status"] == "complete"]
 
 
+def local_successful_trials(state, game):
+    # Released source copies belong to the handoff receiver's count. Imported
+    # records in its active trial table count there, even without local files.
+    return [trial for trial in state["trials"] if trial["game"] == game
+            and trial["full_flash"] is not None and trial["baseline"] is not None
+            and trial["status"] == "complete"]
+
+
+def successful_pair_counts(state):
+    counts = {game: len(successful_trials(state, game)) for game in state["config"]["games"]}
+    if state["config"].get("server"):
+        from reproduction_cluster import shared_pair_counts
+        counts.update(shared_pair_counts(state))
+    return counts
+
+
 def game_trials(state, game):
     trials = [trial for trial in state["trials"] if trial["game"] == game]
     history = (state.get("imported_history", {}).get(game, [])
@@ -101,7 +118,8 @@ def baseline_gate(state, trial):
 def next_seed(state, game):
     from reproduction_seeds import occupied_seeds
 
-    start = state["config"]["start_seed"]
+    start = (state["config"]["start_seed"]
+             + state["config"].get("shared_seed_offsets", {}).get(game, 0))
     step = state["config"].get("seed_step", 1)
     used = {trial["seed"] for trial in game_trials(state, game)}
     seed = max([start] + [value + step for value in used if value >= start and (value - start) % step == 0])
@@ -301,37 +319,37 @@ class Campaign:
             self._cleanup(state)
             # A lease is inherited by the child as well: killing only its worker
             # cannot let another GPU reuse this trial while training is alive.
-            active_games = set()
+            active_games = Counter()
+            shared_games = state["config"].get("shared_games", [])
             for trial in state["trials"]:
                 if (trial["game"] in state["config"]["games"] and trial["status"] != "complete"
-                        and len(successful_trials(state, trial["game"])) < KEEP):
-                    active_games.add(trial["game"])
+                        and (trial["game"] in shared_games
+                             or len(successful_trials(state, trial["game"])) < KEEP)):
+                    active_games[trial["game"]] += 1
                     lease = self._lease(trial)
                     if lease is not None:
                         trial.update(status="running", worker=f"{socket.gethostname()}:{os.getpid()}", error=None)
                         write_json(self.path, state)
                         return "trial", state, dict(trial), lease
             games = state["config"]["games"]
-            unfinished = [game for game in games if len(successful_trials(state, game)) < KEEP]
+            counts = successful_pair_counts(state)
+            unfinished = [game for game in games if counts[game] < KEEP]
             if not unfinished:
                 return "done", state, None, None
-            ready = [game for game in unfinished if game not in active_games]
+            parallel_games = state["config"].get("shared_games", ("gopher", "krull"))
+            # Reserve one remaining pair slot per local in-flight trial. Other
+            # games still have at most one active ON/OFF trial.
+            ready = [game for game in unfinished if active_games[game] < (
+                KEEP - counts[game] if game in parallel_games else 1)]
             if not ready:
                 return "wait", state, None, None
-            # Prioritize idle Gopher until its first successful ON/OFF pair.
-            # Otherwise prefer fewer attempts, then the configured game order.
+            # All games prefer fewer attempts, then configured game order.
             attempts = {game: len(game_trials(state, game)) for game in ready}
-            ordered = sorted(ready, key=lambda game: (
-                not (game == "gopher" and not successful_trials(state, game)),
-                attempts[game]))
+            ordered = sorted(ready, key=attempts.__getitem__)
             for game in ordered:
                 recovered = self._claim_historical(state, game)
                 if recovered is not None:
                     return recovered
-                # Preserve Gopher's first-pair priority even when another
-                # game's historical baseline is available.
-                if game == "gopher" and not successful_trials(state, game):
-                    break
             game = ordered[0]
             # Keep legacy artifact/lease round numbers unique, even for games
             # assigned late under the old server-wide round counter.
@@ -340,6 +358,8 @@ class Campaign:
             trial = dict(game=game, seed=seed, round=round_number, status="running",
                          stage="warmup", full_flash=None, baseline=None, retained=True,
                          worker=f"{socket.gethostname()}:{os.getpid()}", error=None)
+            if game in shared_games:
+                trial["shared_trial"] = True
             lease = self._lease(trial)
             if lease is None:
                 raise RuntimeError("New trial already has an active lease")
@@ -587,11 +607,14 @@ def run_trial(campaign, state, trial, lease):
 
 def show_status(state):
     print(f"Campaign: {state['search_id']} | round {state['round']}")
+    counts = successful_pair_counts(state)
     for game in state["config"]["games"]:
         retained = retained_trials(state, game)
-        count = len(successful_trials(state, game))
+        count = counts[game]
+        scope = (f" ({len(local_successful_trials(state, game))} local; includes last-sync remote results)"
+                 if game in state["config"].get("shared_games", []) else "")
         scores = ", ".join(f"seed{trial['seed']}={trial['full_flash']['score']:g}" for trial in retained)
-        print(f"{game}: {count}/{KEEP} successful pairs; top {len(retained)}: {scores or '-'}")
+        print(f"{game}: {count}/{KEEP} successful pairs{scope}; local top {len(retained)}: {scores or '-'}")
 
 
 def main(argv=None):
@@ -610,7 +633,11 @@ def main(argv=None):
     settings = local_settings()
     campaign = Campaign(args.state or settings.get("state") or DEFAULT_STATE)
     if args.status:
-        show_status(campaign.read())
+        state = campaign.read()
+        if state["config"].get("server"):
+            from reproduction_cluster import apply_assignment
+            apply_assignment(state)
+        show_status(state)
         return 0
     server = args.server
     if server is None and settings.get("state") == str(campaign.path):

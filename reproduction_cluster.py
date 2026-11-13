@@ -51,6 +51,10 @@ def load_plan():
         assigned.extend(entry["games"])
     if len(assigned) != len(set(assigned)) or set(assigned) != set(reproduce.references()):
         raise ValueError("Server plan must assign each of the 26 games exactly once")
+    shared = plan.get("shared_games", [])
+    if (not isinstance(shared, list) or any(not isinstance(game, str) for game in shared)
+            or len(shared) != len(set(shared)) or set(shared) - set(assigned)):
+        raise ValueError("Shared games must be distinct games from the server plan")
     for game, handoff in plan.get("handoffs", {}).items():
         if (game not in assigned or handoff.get("source") not in plan["servers"]
                 or handoff.get("target") not in plan["servers"]
@@ -60,23 +64,79 @@ def load_plan():
     return plan
 
 
+def assigned_games(plan, server):
+    games = list(plan["servers"][server]["games"])
+    return games + [game for game in plan.get("shared_games", []) if game not in games]
+
+
+def game_owner(plan, game):
+    return next(server for server, entry in plan["servers"].items() if game in entry["games"])
+
+
+def shared_pair_counts(state):
+    """Combine live local pairs and last-sync reports, excluding released copies."""
+    shared = state["config"].get("shared_games", [])
+    seeds = {game: {trial["seed"] for trial in reproduce.local_successful_trials(state, game)}
+             for game in shared}
+    if not shared:
+        return {}
+    plan = load_plan()
+    legacy_counts = dict.fromkeys(shared, 0)
+    for server in plan["servers"]:
+        if server == state["config"]["server"]:
+            continue
+        path = reproduce.ROOT / "reproduction/reports" / f"{server}.json"
+        if not path.is_file():
+            continue
+        report = json.loads(path.read_text(encoding="utf-8"))
+        if report.get("version") != 1 or report.get("server") != server:
+            raise ValueError(f"Invalid server report: {path}")
+        for game in shared:
+            progress = report["games"].get(game, {})
+            paired_seeds = progress.get("successful_pair_seeds")
+            if paired_seeds is not None:
+                if (not isinstance(paired_seeds, list)
+                        or any(type(seed) is not int or not 0 <= seed < 2 ** 32 for seed in paired_seeds)):
+                    raise ValueError(f"Invalid successful pair seeds in {path}: {game}")
+                seeds[game].update(paired_seeds)
+            elif server == game_owner(plan, game):
+                # Old reports lack seed lists. Only the current owner's count
+                # is authoritative; a former owner's report may repeat history.
+                count = progress.get("successful_pairs", 0)
+                if type(count) is not int or count < 0:
+                    raise ValueError(f"Invalid successful pair count in {path}: {game}")
+                legacy_counts[game] = count
+    return {game: len(seeds[game]) + legacy_counts[game] for game in shared}
+
+
 def apply_assignment(state, plan=None):
     """Adopt released numeric history, leaving original artifacts in place."""
     plan = load_plan() if plan is None else plan
     server = state["config"]["server"]
     if server not in plan["servers"]:
         raise ValueError(f"Server {server} is missing from the plan")
-    games = plan["servers"][server]["games"]
+    games = assigned_games(plan, server)
+    shared = list(plan.get("shared_games", []))
+    offsets = {}
+    for game in shared:
+        owner = game_owner(plan, game)
+        servers = [owner] + sorted(set(plan["servers"]) - {owner})
+        if len(servers) > state["config"].get("seed_step", 1):
+            raise ValueError("Seed step is too small for distinct shared-game server seeds")
+        offsets[game] = servers.index(server)
+    assignment = dict(games=games, shared_games=shared, shared_seed_offsets=offsets)
     handoffs = plan.get("handoffs", {})
     outgoing = {game for game, move in handoffs.items() if move["source"] == server}
     started = {trial["game"] for trial in state["trials"]}
-    unreleased = (outgoing & (set(state["config"]["games"]) | started)) - set(state.get("released_games", {}))
+    legacy_started = {trial["game"] for trial in state["trials"] if not trial.get("shared_trial")}
+    owned = set(state["config"]["games"]) - set(state["config"].get("shared_games", []))
+    unreleased = (outgoing & (owned | legacy_started)) - set(state.get("released_games", {}))
     if unreleased:
         raise ValueError("Release outgoing history first with python reproduction_cluster.py handoff: "
                          + ", ".join(sorted(unreleased)))
     if started - set(games) - set(state.get("released_games", {})):
         raise ValueError("Cannot transfer games without an explicit history handoff")
-    changed = state["config"]["games"] != games
+    changed = any(state["config"].get(key) != value for key, value in assignment.items())
     # Validate all incoming snapshots before changing local assignment/history.
     incoming = []
     for game, move in handoffs.items():
@@ -109,12 +169,13 @@ def apply_assignment(state, plan=None):
     # Keep the active trial table readable by workers already running older
     # code. They finish their current unrelated game without being interrupted.
     for game in state.get("released_games", {}):
-        departing = [trial for trial in state["trials"] if trial["game"] == game]
+        departing = [trial for trial in state["trials"] if trial["game"] == game
+                     and (game not in shared or not trial.get("shared_trial"))]
         if departing:
             existing = state.setdefault("released_trials", {}).get(game, [])
             by_seed = {trial["seed"]: trial for trial in existing + departing}
             state["released_trials"][game] = list(by_seed.values())
-            state["trials"] = [trial for trial in state["trials"] if trial["game"] != game]
+            state["trials"] = [trial for trial in state["trials"] if trial not in departing]
             changed = True
     for game in list(state.get("imported_history", {})):
         if game not in games:
@@ -133,7 +194,7 @@ def apply_assignment(state, plan=None):
             state["trials"].append(record)
         del state["imported_history"][game]
         changed = True
-    state["config"]["games"] = list(games)
+    state["config"].update(assignment)
     table = reproduce.references()
     for game in games:
         state["config"]["references"].setdefault(game, table[game])
@@ -184,7 +245,8 @@ def release_history(campaign, settings):
             if state["config"].get("server") != server:
                 raise ValueError("Campaign/server identity mismatch")
             for trial in state["trials"]:
-                if trial["game"] in moves:
+                if (trial["game"] in moves and not (
+                        trial["game"] in plan.get("shared_games", []) and trial.get("shared_trial"))):
                     lease = campaign._lease(trial)
                     if lease is None:
                         raise ValueError(f"{trial['game']} is still running. Finish or stop its worker before handoff.")
@@ -352,6 +414,9 @@ def export_report(campaign, server):
         games = {}
         for game in state["config"]["games"]:
             trials = sorted(reproduce.game_trials(state, game), key=lambda trial: (trial["round"], trial["seed"]))
+            pairs = (reproduce.local_successful_trials(state, game)
+                     if game in state["config"].get("shared_games", [])
+                     else reproduce.successful_trials(state, game))
             top = sorted((trial for trial in trials if trial["full_flash"] is not None),
                          key=lambda trial: (-trial["full_flash"]["score"], trial["round"]))[:reproduce.KEEP]
             games[game] = dict(
@@ -359,7 +424,7 @@ def export_report(campaign, server):
                     trial["status"] == "complete" and
                     (trial.get("source_status", "complete") == "complete" or trial["baseline"] is not None)
                     for trial in trials),
-                successful_pairs=len(reproduce.successful_trials(state, game)),
+                successful_pairs=len(pairs), successful_pair_seeds=sorted({trial["seed"] for trial in pairs}),
                 latest={key: trials[-1].get(key) for key in ("seed", "status", "stage")} if trials else None,
                 top=[dict(seed=trial["seed"], score=trial["full_flash"]["score"],
                           delta_hns=trial["full_flash"]["delta_hns"],
@@ -375,20 +440,24 @@ def show_reports():
     plan = load_plan()
     print("Server  GPUs  Games  Round  Complete trials  Successful pairs  Last sync (UTC)")
     for server, entry in plan["servers"].items():
+        games = assigned_games(plan, server)
         path = reproduce.ROOT / "reproduction/reports" / f"{server}.json"
         if not path.exists():
-            print(f"{server:6}  {entry['gpus']:4}  {len(entry['games']):5}  {'-':5}  no report")
+            print(f"{server:6}  {entry['gpus']:4}  {len(games):5}  {'-':5}  no report")
             continue
         report = json.loads(path.read_text())
-        current = [report["games"][game] for game in entry["games"] if game in report["games"]]
+        current = [report["games"][game] for game in games if game in report["games"]]
         done = sum(game["completed"] for game in current)
         pairs = sum(game["successful_pairs"] for game in current)
-        print(f"{server:6}  {entry['gpus']:4}  {len(entry['games']):5}  {report['round']:5}  "
-              f"{done:15}  {pairs:7}/{4 * len(entry['games']):<8}  {report['updated_at']}")
-        unstarted = [game for game in entry["games"]
+        print(f"{server:6}  {entry['gpus']:4}  {len(games):5}  {report['round']:5}  "
+              f"{done:15}  {pairs:16}  {report['updated_at']}")
+        unstarted = [game for game in games
                      if game in report["games"] and report["games"][game]["attempts"] == 0]
         if unstarted:
             print("        Not started at last sync: " + ", ".join(unstarted))
+    summary = dict(config=dict(server=None, shared_games=plan.get("shared_games", [])), trials=[])
+    for game, count in shared_pair_counts(summary).items():
+        print(f"{game} (shared, last sync): {count}/{reproduce.KEEP} successful pairs across all servers")
 
 
 def move_game(campaign, settings, game, target):
@@ -401,6 +470,8 @@ def move_game(campaign, settings, game, target):
             raise ValueError("Campaign/server identity mismatch")
         if target not in plan["servers"] or target == server:
             raise ValueError("Select a different target server from the plan")
+        if game in plan.get("shared_games", []):
+            raise ValueError("Shared games already run on every server; keep their owner for stable seeds")
         source = plan["servers"][server]["games"]
         if game not in source:
             raise ValueError("Run move on the server that currently owns this game")

@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "shared_games": ["gopher", "krull"],
   "servers": {
     "a": {
       "gpus": 4,

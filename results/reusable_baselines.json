@@ -1,0 +1,293 @@
+{
+  "version": 1,
+  "source": {
+    "workbook": "results/performance_twister.xlsx",
+    "sha256": "ffa408b1923d01d75b107f03db2e1777e2d784d85383c015438c9132e47ce7de"
+  },
+  "selection": "Unpaired finished 999N OFF scores >= mean OFF score of existing same-seed ON/OFF pairs",
+  "excluded_games": [
+    "gopher"
+  ],
+  "games": {
+    "alien": {
+      "paired_baseline_mean": 1143.1,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": []
+    },
+    "amidar": {
+      "paired_baseline_mean": 156.725,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": []
+    },
+    "assault": {
+      "paired_baseline_mean": 795.565,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": []
+    },
+    "asterix": {
+      "paired_baseline_mean": 1353.5,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": [
+        {
+          "seed": 9997,
+          "score": 1374.5,
+          "enabled": true,
+          "run_ids": [
+            "153qwcr7"
+          ],
+          "run_names": [
+            "callbacks/asterix_seed9997/atari100k-asterix"
+          ],
+          "run_urls": [
+            "https://wandb.ai/choemj-kaist/nnet/runs/153qwcr7"
+          ]
+        }
+      ]
+    },
+    "bank_heist": {
+      "paired_baseline_mean": 972.0,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": []
+    },
+    "battle_zone": {
+      "paired_baseline_mean": 13580.0,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": []
+    },
+    "boxing": {
+      "paired_baseline_mean": 91.41499999999999,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": []
+    },
+    "breakout": {
+      "paired_baseline_mean": 25.92,
+      "paired_seeds": [
+        3100
+      ],
+      "baselines": []
+    },
+    "chopper_command": {
+      "paired_baseline_mean": 476.0,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": [
+        {
+          "seed": 9997,
+          "score": 694.0,
+          "enabled": true,
+          "run_ids": [
+            "bdnhce3m"
+          ],
+          "run_names": [
+            "callbacks/chopper_command_seed9997/atari100k-chopper_command"
+          ],
+          "run_urls": [
+            "https://wandb.ai/choemj-kaist/nnet/runs/bdnhce3m"
+          ]
+        }
+      ]
+    },
+    "crazy_climber": {
+      "paired_baseline_mean": 69295.0,
+      "paired_seeds": [
+        3100
+      ],
+      "baselines": []
+    },
+    "demon_attack": {
+      "paired_baseline_mean": 456.15,
+      "paired_seeds": [
+        3090
+      ],
+      "baselines": []
+    },
+    "freeway": {
+      "paired_baseline_mean": 15.925,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": []
+    },
+    "frostbite": {
+      "paired_baseline_mean": 306.53333333333336,
+      "paired_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "baselines": [
+        {
+          "seed": 9997,
+          "score": 314.0,
+          "enabled": true,
+          "run_ids": [
+            "bxi0ll4c"
+          ],
+          "run_names": [
+            "callbacks/frostbite_seed9997/atari100k-frostbite"
+          ],
+          "run_urls": [
+            "https://wandb.ai/choemj-kaist/nnet/runs/bxi0ll4c"
+          ]
+        }
+      ]
+    },
+    "hero": {
+      "paired_baseline_mean": 13396.383333333333,
+      "paired_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "baselines": []
+    },
+    "jamesbond": {
+      "paired_baseline_mean": 588.0,
+      "paired_seeds": [
+        3090
+      ],
+      "baselines": []
+    },
+    "kangaroo": {
+      "paired_baseline_mean": 4286.0,
+      "paired_seeds": [
+        3110
+      ],
+      "baselines": []
+    },
+    "krull": {
+      "paired_baseline_mean": null,
+      "paired_seeds": [],
+      "baselines": []
+    },
+    "kung_fu_master": {
+      "paired_baseline_mean": 21492.0,
+      "paired_seeds": [
+        3100
+      ],
+      "baselines": [
+        {
+          "seed": 9997,
+          "score": 33290.0,
+          "enabled": true,
+          "run_ids": [
+            "jhunq4oj"
+          ],
+          "run_names": [
+            "callbacks/kung_fu_master_seed9997/atari100k-kung_fu_master"
+          ],
+          "run_urls": [
+            "https://wandb.ai/choemj-kaist/nnet/runs/jhunq4oj"
+          ]
+        }
+      ]
+    },
+    "ms_pacman": {
+      "paired_baseline_mean": 1828.3,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": [
+        {
+          "seed": 9997,
+          "score": 2479.6,
+          "enabled": true,
+          "run_ids": [
+            "n2tvweww"
+          ],
+          "run_names": [
+            "callbacks/ms_pacman_seed9997/atari100k-ms_pacman"
+          ],
+          "run_urls": [
+            "https://wandb.ai/choemj-kaist/nnet/runs/n2tvweww"
+          ]
+        }
+      ]
+    },
+    "pong": {
+      "paired_baseline_mean": 20.98,
+      "paired_seeds": [
+        3090
+      ],
+      "baselines": []
+    },
+    "private_eye": {
+      "paired_baseline_mean": 1435.64,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": []
+    },
+    "qbert": {
+      "paired_baseline_mean": 3802.125,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": []
+    },
+    "road_runner": {
+      "paired_baseline_mean": 22930.0,
+      "paired_seeds": [
+        3090,
+        3100
+      ],
+      "baselines": [
+        {
+          "seed": 9998,
+          "score": 23434.0,
+          "enabled": true,
+          "run_ids": [
+            "6pn495jh"
+          ],
+          "run_names": [
+            "callbacks/road_runner_seed9998/atari100k-road_runner"
+          ],
+          "run_urls": [
+            "https://wandb.ai/choemj-kaist/nnet/runs/6pn495jh"
+          ]
+        }
+      ]
+    },
+    "seaquest": {
+      "paired_baseline_mean": 520.6,
+      "paired_seeds": [
+        3090
+      ],
+      "baselines": []
+    },
+    "up_n_down": {
+      "paired_baseline_mean": 13376.3,
+      "paired_seeds": [
+        3090
+      ],
+      "baselines": []
+    }
+  }
+}

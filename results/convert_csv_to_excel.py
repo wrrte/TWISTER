@@ -11,6 +11,7 @@ import sys
 import tempfile
 
 from classify_wandb_runs import FIELDS, HERE, SCORE_KEY, apply_run_overrides, load_run_overrides, number
+from baseline_pairs import load_pairings, prepare_records
 
 
 # (Random, Human, TWISTER paper): transcribed from the user's table, 2026-10-22.
@@ -43,7 +44,7 @@ REFERENCE_SCORES = {
     "seaquest": (68, 42055, 532),
     "upndown": (533, 11693, 7068),
 }
-PAIRED_MEAN_COLUMN = "Mean (공통 시드)"
+PAIRED_MEAN_COLUMN = "Mean (결과 쌍)"
 ALL_SEED_MEAN_COLUMN = "Mean (시드 수 맞춤)"
 SCORE_DELTA_COLUMN = "Δ Score (행별 비교)"
 HNS_DELTA_COLUMN = "Δ HNS (행별 비교)"
@@ -110,12 +111,24 @@ def comparison_seeds(records, all_seed=False):
     shared_seeds = set(baseline["scores"])
     for record in enabled:
         shared_seeds.intersection_update(record["scores"])
-    if not shared_seeds:
+    if not enabled:
+        seeds = tuple(sorted(shared_seeds, key=seed_sort_key))
+        return {baseline["config"]: seeds}, f"ON 결과가 없어 완료된 baseline의 유효 시드: {', '.join(seeds)}"
+    on_seeds = set.intersection(*(set(record["scores"]) for record in enabled))
+    adopted = {target: source for target, source in baseline.get("pairings", {}).items() if target in on_seeds}
+    consumed = set(adopted.values())
+    pairs = {seed: seed for seed in shared_seeds if seed not in consumed and seed not in adopted}
+    pairs.update(adopted)
+    if not pairs:
         return {}, "비교할 완료 run의 공통 시드가 없습니다."
-    seeds = tuple(sorted(shared_seeds, key=seed_sort_key))
-    description = ("OFF와 모든 ON 설정의 공통 시드" if enabled else
-                   "ON 결과가 없어 완료된 baseline의 유효 시드")
-    return {record["config"]: seeds for record in compared}, f"{description}: {', '.join(seeds)}"
+    targets = tuple(sorted(pairs, key=seed_sort_key))
+    selected = {baseline["config"]: tuple(pairs[seed] for seed in targets)}
+    selected.update({record["config"]: targets for record in enabled})
+    notes = [f"동일 시드 쌍: {', '.join(seed for seed in targets if seed not in adopted) or '없음'}"]
+    if adopted:
+        notes.append("명시적 재사용 쌍 (원본 시드 유지): " + ", ".join(
+            f"OFF {source} -> ON {target}" for target, source in sorted(adopted.items(), key=lambda item: seed_sort_key(item[0]))))
+    return selected, "\n".join(notes)
 
 
 def comparison_metrics(records, reference, all_seed=False):
@@ -144,7 +157,8 @@ def comparison_metrics(records, reference, all_seed=False):
     return metrics, paper_metrics, note
 
 
-def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=None, all_seed=False):
+def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=None, all_seed=False,
+                         baseline_pairings_path=None):
     try:
         from openpyxl import Workbook
         from openpyxl.comments import Comment
@@ -164,6 +178,7 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
     # Reapply confirmed corrections and include evaluated runs absent from an older CSV.
     overrides = load_run_overrides(run_overrides_path)
     apply_run_overrides(rows, overrides)
+    pairings = load_pairings(path=baseline_pairings_path)
     for row in rows:
         row["Seed"] = seed_label(row)
     if overrides:
@@ -178,7 +193,9 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
         key = (row["Environment"], row["Game"], row["Config"])
         groups[key][row["Seed"]].append(row)
     seeds = sorted({seed for group in groups.values() for seed in group
-                    if seed_sort_key(seed) is not None}, key=seed_sort_key)
+                    if seed_sort_key(seed) is not None} | {
+                        str(binding["baseline"]["seed"]) for game in pairings.values() for binding in game.values()},
+                   key=seed_sort_key)
 
     workbook = Workbook()
     results = workbook.active
@@ -218,6 +235,18 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
     mean_column = 3 + len(seeds)
     game_blocks, paper_rows = [], []
     for (environment, game), records in sorted(game_records.items()):
+        bindings = pairings.get(environment.removeprefix("atari100k-"), {})
+        records = prepare_records(records, bindings)
+        for record in records:
+            record.setdefault("cells", [None] * len(seeds))
+            record.setdefault("comments", [""] * len(seeds))
+            if record["retrieval"] == "false":
+                for target, binding in bindings.items():
+                    source = str(binding["baseline"]["seed"])
+                    index = seeds.index(source)
+                    record["cells"][index] = record["scores"][source]
+                    record["comments"][index] += (f"\nReusable baseline seed {source} -> full FLASH seed {target}; "
+                                                  "frozen score from reproduction/baseline_pairings.")
         reference = reference_scores(environment, game)
         metrics, paper_metrics, comparison_note = comparison_metrics(records, reference, all_seed)
         first_row = results.max_row + 1
@@ -245,7 +274,8 @@ def convert_csv_to_excel(csv_path=None, output_path=None, run_overrides_path=Non
         "시드 번호는 일치하지 않아도 되며, 초과 시드는 점수 최솟값→최댓값→다음 최솟값→"
         "다음 최댓값 순서로 제외합니다. 동점은 시드 번호 오름차순으로 정렬합니다. "
         "실제 사용/제외 시드는 각 평균 셀 메모에 기록합니다. " if all_seed else
-        "게임별 OFF와 모든 ON 설정에 유효한 최종 점수가 있는 공통 시드를 사용합니다. "
+        "게임별 OFF와 모든 ON 설정의 동일 시드 쌍 및 명시적 baseline 재사용 쌍을 사용합니다. "
+        "재사용은 원본 999N baseline 시드를 유지하며 각 baseline은 한 번만 셉니다. "
     ) + ("ON 결과가 아직 없으면 완료된 baseline의 모든 유효 시드를 사용합니다. "
          "같은 시드의 중복 run은 먼저 평균하며, 실행 중·점수 누락·시드 미확인은 제외합니다. "
          "Gopher의 과거 수동 평가 baseline은 3110-old로 구분하며 3110과 짝짓지 않습니다. "
@@ -342,9 +372,11 @@ def main(argv=None):
                         help="Run-ID/name config and score corrections; defaults to results/run_overrides.json")
     parser.add_argument("--all-seed", action="store_true",
                         help="Ignore seed IDs; equalize OFF/all ON counts by removing lowest/highest scores alternately")
+    parser.add_argument("--baseline-pairings", type=Path, help="Explicit cross-seed pair directory or JSON file")
     args = parser.parse_args(argv)
     try:
-        convert_csv_to_excel(args.input, args.output, args.run_overrides, all_seed=args.all_seed)
+        convert_csv_to_excel(args.input, args.output, args.run_overrides, all_seed=args.all_seed,
+                             baseline_pairings_path=args.baseline_pairings)
         return 0
     except (OSError, ValueError, RuntimeError) as error:
         print(f"Excel conversion failed: {error}", file=sys.stderr)

@@ -124,6 +124,17 @@ and numeric history transferred from another server are included. The gate is
 saved before baseline starts and reused after an interruption. A previously
 rejected gate is reconsidered when more pairs have completed.
 
+Before training OFF, workers can pair a qualifying full FLASH result with an
+unused 999N baseline in [results/reusable_baselines.json](results/reusable_baselines.json).
+The initial pool selects scores at least as high as the existing paired OFF
+mean in the supplied workbook, excluding Gopher and games with no existing pairs.
+Edit the list or disable an entry with `enabled: false`. Each baseline is used
+once; its original seed and run identity are preserved in an explicit record
+under `reproduction/baseline_pairings/`. These completed pairs count toward the
+three-pair priority, four-pair stopping rule and paired mean gate immediately.
+Excel and `results/update_tex.py` read the same records, including after Git sync.
+See [pool editing and cross-seed comparisons](results/README.md#999n-baseline-재사용-목록).
+
 Before starting a new seed, idle workers revisit skipped baselines in descending
 full FLASH score order. If the current paired mean now qualifies a seed and its
 original warmup checkpoint, optimizer/RNG state, replay files and run settings

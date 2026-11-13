@@ -11,3 +11,4 @@ job_queue_*.lock
 tests/
 results/reproduction/
 reproduction.local.json
+results/reusable_baselines.lock

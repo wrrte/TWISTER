@@ -325,6 +325,17 @@ class Campaign:
             if not gate["accepted"]:
                 # All remaining scores are lower under the same paired mean.
                 break
+            lease = self._lease(trial)
+            if lease is None:
+                continue
+            reused = False
+            try:
+                reused = self._reuse_baseline(state, trial, gate)
+            finally:
+                if not reused:
+                    lease.close()
+            if reused:
+                return "trial", state, dict(trial), lease
             source, reason = available_baseline_source(state, trial)
             if source is None:
                 skipped = dict(reason=reason, previous_pair_seeds=gate["previous_pair_seeds"])
@@ -349,6 +360,79 @@ class Campaign:
             return "trial", state, dict(trial), lease
         return None
 
+    def _reuse_baseline(self, state, trial, gate=None):
+        """Caller holds this campaign lock; publish the binding before state."""
+        from results.baseline_pairs import allocation_lock, load_pairings, load_pool, pairing_path
+
+        gate = trial.get("baseline_gate", {}) if gate is None else gate
+        if (trial["game"] == "gopher" or trial["baseline"] is not None or not gate.get("accepted")):
+            return False
+        bindings = load_pairings(ROOT).get(trial["game"], {})
+        existing = bindings.get(str(trial["seed"]))
+        # Independent servers cannot atomically share a pool lock. Let the
+        # shared game's original owner consume its pool; all its GPUs can help.
+        if (trial["game"] in state["config"].get("shared_games", [])
+                and state["config"].get("shared_seed_offsets", {}).get(trial["game"], 0) != 0
+                and existing is None):
+            return False
+        candidates = load_pool(ROOT).get(trial["game"], []) if existing is None else []
+        if not candidates and existing is None:
+            return False
+        with allocation_lock(ROOT):
+            bindings = load_pairings(ROOT).get(trial["game"], {})
+            binding = bindings.get(str(trial["seed"]))
+            if binding is None:
+                used = {item["baseline"]["seed"] for item in bindings.values()}
+                for previous in successful_trials(state, trial["game"]):
+                    used.add(previous["baseline"].get("seed", previous["seed"]))
+                candidate = next((entry for entry in candidates if entry["seed"] not in used), None)
+                if candidate is None:
+                    return False
+                reason = cancellation_reason(trial, game_progress(state)[trial["game"]])
+                if reason:
+                    raise TrialCancelled(reason)
+                binding = dict(version=1, kind="reused_baseline_cross_seed", game=trial["game"],
+                               full_flash_seed=trial["seed"], full_flash_score=trial["full_flash"]["score"],
+                               baseline=dict(candidate), gate=dict(gate),
+                               search_id=state["search_id"], server=state["config"].get("server"))
+                write_json(pairing_path(trial["game"], trial["seed"], ROOT), binding)
+            elif not math.isclose(binding["full_flash_score"], trial["full_flash"]["score"],
+                                  rel_tol=1e-9, abs_tol=1e-9):
+                raise ValueError("Saved baseline pairing has a different full FLASH score")
+            baseline = dict(version=1, env_name="atari100k-" + trial["game"],
+                            seed=binding["baseline"]["seed"], retrieval_enabled=False,
+                            metrics=dict(score=binding["baseline"]["score"]),
+                            source="reused_baseline", pairing=binding)
+            previous_gate = trial.get("baseline_gate")
+            if previous_gate is not None and previous_gate != gate:
+                trial.setdefault("baseline_gate_history", []).append(previous_gate)
+            trial.update(baseline=baseline, baseline_reuse=str(pairing_path(
+                trial["game"], trial["seed"], ROOT).relative_to(ROOT)),
+                         baseline_gate=gate, status="complete", stage="done", error=None)
+            write_json(self.path, state)
+        print(f"{trial['game']} full FLASH seed {trial['seed']}: reused baseline seed "
+              f"{baseline['seed']} (score={baseline['metrics']['score']:g}); no baseline training.", flush=True)
+        return True
+
+    def reuse_baseline(self, trial):
+        with self.locked():
+            state = self.read()
+            saved = next(item for item in state["trials"]
+                         if (item["game"], item["round"]) == (trial["game"], trial["round"]))
+            self._reuse_baseline(state, saved)
+            return dict(saved)
+
+    def _restore_baseline_bindings(self, state):
+        from results.baseline_pairs import load_pairings
+
+        bindings = load_pairings(ROOT)
+        for trial in state["trials"]:
+            binding = bindings.get(trial["game"], {}).get(str(trial["seed"]))
+            if binding is not None and trial["full_flash"] is not None and trial["baseline"] is None:
+                # A crash between binding publication and the state write must
+                # neither lose a pair nor consume the baseline a second time.
+                self._reuse_baseline(state, trial, binding["gate"])
+
     def claim(self):
         with self.locked():
             state = self.read()
@@ -359,6 +443,7 @@ class Campaign:
                 from reproduction_cluster import apply_assignment
                 if apply_assignment(state):
                     write_json(self.path, state)
+            self._restore_baseline_bindings(state)
             self._cleanup(state)
             # A lease is inherited by the child as well: killing only its worker
             # cannot let another GPU reuse this trial while training is alive.
@@ -472,6 +557,8 @@ class Campaign:
         state = self.read()
         saved = next(item for item in state["trials"]
                      if (item["game"], item["round"]) == (trial["game"], trial["round"]))
+        if saved["status"] == "complete":
+            return
         reason = (saved.get("cancellation_reason") if saved["status"] == "cancelled"
                   else cancellation_reason(saved, game_progress(state)[trial["game"]]))
         if reason:
@@ -622,6 +709,8 @@ def evaluate_warmup_baseline(state, trial, lease, environment, campaign=None):
 
 
 def run_trial(campaign, state, trial, lease):
+    if trial["status"] == "complete" and trial["baseline"] is not None:
+        return
     from retrieval_runs import branch_commands, WARMUP_UNAVAILABLE_EXIT_CODE
 
     campaign.check_cancellation(trial)
@@ -692,6 +781,8 @@ def run_trial(campaign, state, trial, lease):
     print(f"{trial['game']} seed {trial['seed']}: baseline gate accepted={gate['accepted']}, "
           f"individual={gate['individual_passes']}, paired mean={gate['mean_passes']} "
           f"(mean HNS={gate['mean_hns']:.6f}, previous pairs={len(gate['previous_pair_seeds'])})", flush=True)
+    if gate["accepted"] and trial["baseline"] is None:
+        trial = campaign.reuse_baseline(trial)
     if gate["accepted"] and trial["baseline"] is None:
         campaign.update(trial, stage="baseline")
         result_path = paths["baseline"] / "final_evaluation.json"

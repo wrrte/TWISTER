@@ -292,7 +292,9 @@ def release_history(campaign, settings):
                         status="complete" if trial["status"] == "complete" else "released",
                         retained=False,
                         full_flash=None if full is None else reproduce.compare_score(full["score"], state["config"]["references"][game]),
-                        baseline=None if baseline is None else dict(metrics=dict(score=baseline["metrics"]["score"]))))
+                        baseline=None if baseline is None else (dict(baseline)
+                            if baseline.get("source") == "reused_baseline"
+                            else dict(metrics=dict(score=baseline["metrics"]["score"])))))
                 snapshot = dict(version=1, id=released or uuid.uuid4().hex, game=game,
                                 source=server, target=move["target"], search_id=state["search_id"],
                                 reference=state["config"]["references"].get(game, reproduce.references()[game]),
@@ -518,9 +520,16 @@ def git(*arguments, capture=False, check=True):
 
 
 def sync_git(campaign, settings):
+    from results.baseline_pairs import load_pairings, pairing_path
+
     server = settings["server"]
     report = reproduce.ROOT / "reproduction/reports" / f"{server}.json"
     paths = [str(report.relative_to(reproduce.ROOT))]
+    for bindings in load_pairings(reproduce.ROOT).values():
+        for binding in bindings.values():
+            if binding.get("server") == server:
+                paths.append(str(pairing_path(binding["game"], binding["full_flash_seed"],
+                                             reproduce.ROOT).relative_to(reproduce.ROOT)))
     if settings.get("pending_plan"):
         paths.append(str(plan_path().relative_to(reproduce.ROOT)))
     for game in settings.get("pending_handoffs", ()):

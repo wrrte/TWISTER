@@ -13,6 +13,7 @@ REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 
 
 def occupied_seeds(root):
+    from results.baseline_pairs import load_pairings
     # Excel exports are Git-ignored. Ship their seed reservations separately so
     # every server protects the known runs even without its own workbook.
     manifest = json.loads((root / "reproduction/seed_reservations.json").read_text(encoding="utf-8"))
@@ -23,6 +24,9 @@ def occupied_seeds(root):
     if workbook.is_file():
         for game, seeds in workbook_seeds(workbook).items():
             result.setdefault(game, set()).update(seeds)
+    for game, pairings in load_pairings(root).items():
+        for pairing in pairings.values():
+            result.setdefault(game, set()).update((pairing["full_flash_seed"], pairing["baseline"]["seed"]))
     return result
 
 

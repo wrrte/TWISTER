@@ -129,8 +129,8 @@ Excel 시트:
 
 오른쪽 비교 지표는 STORM과 같은 행별 비교 방식으로 계산합니다.
 
-- `Mean (공통 시드)`: 해당 게임의 OFF와 모든 ON 설정 양쪽에 완료된 최종 점수가
-  있는 공통 시드의 평균입니다. ON 결과가 아직 없으면 완료된 baseline의 모든
+- `Mean (결과 쌍)`: 해당 게임의 OFF와 모든 ON 설정 양쪽에 완료된 최종 점수가
+  있는 동일 시드 쌍과 아래의 명시적 baseline 재사용 쌍의 평균입니다. ON 결과가 아직 없으면 완료된 baseline의 모든
   유효 시드로 계산합니다. 같은 설정·시드의 중복 run은 먼저 평균합니다.
 - `Δ Score (행별 비교)`: 논문 행에는 `OFF 평균 − TWISTER 논문 점수`를 부호와
   함께 표시합니다. ON 행에는 `|ON 평균 − OFF 평균|`를 표시합니다.
@@ -139,7 +139,7 @@ Excel 시트:
   부호를 유지하며 백분율이 아닙니다.
 
 실행 중·점수 누락·시드 미확인은 비교 지표에서 제외하며, 별도의 시드 제외 목록은
-사용하지 않습니다. OFF baseline이 확인되지 않거나 ON/OFF 사이 공통 시드가 없으면
+사용하지 않습니다. OFF baseline이 확인되지 않거나 유효한 동일 시드/명시적 재사용 쌍이 없으면
 비교 지표는 빈칸으로 둡니다. 논문 행의 평균, OFF 행의 두 차이 값도 빈칸입니다.
 
 retrieval config가 없는 과거 run의 정확한 세부 설정 비교에는 당시 설정 정보가
@@ -148,7 +148,7 @@ retrieval config가 없는 과거 run의 정확한 세부 설정 비교에는 �
 ### 시드 번호와 무관하게 개수를 맞춰 비교
 
 두 스크립트에 `--all-seed`를 붙이면 공통 시드 대신 게임별로 **OFF와 모든 ON
-설정의 유효 시드 수 중 최솟값**에 맞춰 비교합니다. 옵션이 없으면 기존 공통 시드
+설정의 유효 시드 수 중 최솟값**에 맞춰 비교합니다. 옵션이 없으면 동일 시드/명시적 재사용 쌍
 방식을 사용합니다.
 
 ```bash
@@ -216,6 +216,51 @@ env_name=atari100k-road_runner override_config='{"retrieval_enabled":false}' pyt
 python -m unittest discover -s results -p 'test_*.py'
 ```
 
+## 999N baseline 재사용 목록
+
+[`reusable_baselines.json`](reusable_baselines.json)은 현재 엑셀의 `Runs` 시트에서 만든
+수정 가능한 목록입니다. 완료된 9990–9999 OFF 시드 중, 기존 동일 시드 ON/OFF 쌍의
+**OFF 점수 평균 이상**인 미사용 baseline을 선정했습니다. 중복 run은 시드별로 먼저
+평균하고, Gopher 및 기존 쌍이 없어 기준 평균을 구할 수 없는 게임은 자동 선정에서
+제외합니다. 각 게임의 `paired_baseline_mean`과 `paired_seeds`는 선정 당시의 근거입니다.
+
+초기 목록은 Asterix 9997(1374.5), Chopper Command 9997(694), Frostbite 9997(314),
+Kung Fu Master 9997(33290), Ms. Pacman 9997(2479.6), Road Runner 9998(23434)입니다.
+
+`games.<ROM 이름>.baselines`에서 항목을 추가·제거하거나 `enabled: false`로 사용을
+끄면 됩니다. 각 항목에는 원래 `seed`, 유한한 `score`, 가능한 경우 `run_ids`,
+`run_names`, `run_urls`를 유지하세요. 배열 순서가 사용 순서입니다. 평균 기준은 초기
+선정에만 사용하고, worker는 이후 사용자가 편집한 목록을 그대로 따릅니다.
+
+새 worker는 조건을 만족한 full FLASH에 미사용 항목 하나를 연결하고 OFF 재학습을
+생략합니다. 예전에 건너뛴 full FLASH도 재검사 시 조건을 통과하면 연결할 수 있으며,
+원래 warmup이 없어도 됩니다. 한 baseline은 게임 내 한 쌍에만 쓰고, 연결은
+`reproduction/baseline_pairings/<game>/seed<ON seed>.json`에 원본 999N 시드·점수·run과
+ON 시드·점수·통과 조건을 함께 저장합니다. 서로 다른 시드임을 유지하며 가상의 OFF
+run을 만들지 않습니다. 이미 확정한 연결은 목록을 수정해도 바꾸지 않습니다.
+
+같은 서버의 여러 worker/campaign은 공통 잠금으로 중복 사용을 막습니다. 공유 게임은
+서버 간 중복 할당을 피하려고 기존 이력 담당 서버만 목록을 소비합니다(Krull은 B).
+Gopher는 수동으로 목록에 넣어도 재사용하지 않습니다. 일일 `reproduction_cluster.py sync`는
+자기 서버가 만든 연결 파일도 보고서와 함께 교환합니다.
+
+`update_tex.py`와 Excel 변환기는 이 연결 파일을 자동으로 읽어 해당 OFF/ON 점수를
+같은 쌍으로 집계합니다. 출력과 셀 메모에는 `OFF 9997 -> ON 3130`처럼 실제 두 시드를
+표시합니다. CSV에 옛 OFF run이 없어도 연결 파일의 확정 점수를 사용할 수 있습니다.
+일반 동일 시드 쌍과 재사용 쌍을 중복 집계하지 않으며 `--all-seed`에서도 실제 OFF
+시드 수를 늘리는 가상 별칭은 만들지 않습니다. 연결된 원본 OFF 시드는 일반 동일 시드
+쌍으로 다시 소비하지 않고, 명시적 연결이 있는 ON 시드는 그 연결을 우선합니다.
+
+```bash
+# 원본 엑셀로 목록을 다시 만들 때만 실행. 기존 수동 편집을 보호합니다.
+python results/baseline_pairs.py --workbook results/performance_twister.xlsx
+# 기존 목록을 교체하려면 명시적으로 --overwrite 추가
+
+# 연결 파일의 다른 경로를 시험하려면 두 집계기에 같은 경로 지정
+python results/update_tex.py --baseline-pairings reproduction/baseline_pairings --dry-run
+python results/convert_csv_to_excel.py --baseline-pairings reproduction/baseline_pairings
+```
+
 ## 논문의 main performance 표 갱신
 
 TWISTER 루트에서 최신 CSV를 만든 뒤 실행합니다. TeX 갱신 자체는 W&B에 접속하지
@@ -248,17 +293,17 @@ Random/Human·STORM·DRAMA 셀과 제목·다른 표는 보존합니다.
 기존 STORM·DRAMA 갱신기도 이 세 열이 추가된 배치를 허용하도록 열 검사만
 확장했습니다. 각 갱신기는 자기 방법의 세 열만 갱신합니다.
 
-기본 점수는 Excel의 **Mean (공통 시드)**와 같은 방식으로 집계합니다.
+기본 점수는 Excel의 **Mean (결과 쌍)**와 같은 방식으로 집계합니다.
 `--all-seed` 사용 시에는 위의 **시드 수 맞춤** 방식을 사용하며, 아래 HNS 계산식은
 각 설정에서 선택한 시드에 적용합니다.
 
 - 보정 파일을 먼저 적용하고, 완료된 `finished` run의 유한한 최종 점수만 사용합니다.
   실행 중·실패·warmup·점수 누락·시드 미확인 run은 사용하지 않습니다.
 - 같은 게임·설정·시드의 중복 run은 먼저 평균합니다. 그다음 OFF와 모든 ON 설정에
-  공통으로 존재하는 시드만 골라 평균합니다. baseline만 있는 게임은 사용하지 않습니다.
+  동일 시드 쌍과 명시적 baseline 재사용 쌍을 골라 평균합니다. baseline만 있는 게임은 사용하지 않습니다.
 - ON 설정이 여러 종류이면 `--on-config 'CSV의 정확한 Config 문자열'`로 표에 넣을
   설정을 지정합니다. 공통 시드는 Excel과 마찬가지로 모든 ON 설정과 교집합을 취합니다.
-- 공통 시드 쌍이 없는 게임은 `-`로 표시하고 집계에서 제외합니다. 기존 숫자를
+- 유효한 결과 쌍이 없는 게임은 `-`로 표시하고 집계에서 제외합니다. 기존 숫자를
   남겨 두거나 누락을 0점으로 계산하지 않습니다. 게임·시드의 현재 포함 범위를 출력합니다.
 
 HNS에는 **논문 표에 있는** Random/Human 값을 사용합니다. Excel의 참고용 정수

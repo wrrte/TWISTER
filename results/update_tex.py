@@ -15,6 +15,7 @@ import tempfile
 
 from classify_wandb_runs import SCORE_KEY, apply_run_overrides, load_run_overrides, number
 from convert_csv_to_excel import comparison_metrics, comparison_seeds, seed_label, seed_sort_key
+from baseline_pairs import load_pairings, prepare_records
 
 
 HERE = Path(__file__).resolve().parent
@@ -33,7 +34,7 @@ class ComparisonScores:
     enabled: tuple
 
 
-def load_results(csv_path, run_overrides_path=None, on_config=None, all_seed=False):
+def load_results(csv_path, run_overrides_path=None, on_config=None, all_seed=False, baseline_pairings_path=None):
     """Use Excel's duplicate means and shared/balanced seed selection."""
     with Path(csv_path).open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
@@ -43,6 +44,7 @@ def load_results(csv_path, run_overrides_path=None, on_config=None, all_seed=Fal
             raise ValueError("Missing CSV columns: " + ", ".join(sorted(missing)))
         rows = list(reader)
     apply_run_overrides(rows, load_run_overrides(run_overrides_path))
+    pairings = load_pairings(path=baseline_pairings_path)
     groups = defaultdict(lambda: defaultdict(list))
     for row in rows:
         if row.get("Score Status") == "warmup" or not row["Environment"].startswith("atari100k-"):
@@ -75,6 +77,7 @@ def load_results(csv_path, run_overrides_path=None, on_config=None, all_seed=Fal
     selected = on_config if on_config is not None else next(iter(on_configs), None)
     results = {}
     for (environment, game), records in sorted(games.items()):
+        records = prepare_records(records, pairings.get(environment.removeprefix("atari100k-"), {}))
         baselines = [record for record in records if record["retrieval"] == "false"]
         enabled = [record for record in records if record["retrieval"] == "true"]
         ours = next((record for record in enabled if record["config"] == selected), None)
@@ -278,6 +281,7 @@ def main(argv=None):
     parser.add_argument("--on-config", help="Exact ON config label; needed only when several ON configs exist")
     parser.add_argument("--all-seed", action="store_true",
                         help="Ignore seed IDs; equalize OFF/all ON counts by removing lowest/highest scores alternately")
+    parser.add_argument("--baseline-pairings", type=Path, help="Explicit cross-seed pair directory or JSON file")
     parser.add_argument("--dry-run", action="store_true", help="Report seed coverage and metrics without writing TeX")
     args = parser.parse_args(argv)
     args.tex = args.tex.expanduser().resolve()
@@ -285,7 +289,8 @@ def main(argv=None):
     if args.csv.resolve() == args.tex.resolve():
         raise ValueError("TeX output must differ from the input CSV")
     print(f"TeX: {args.tex}")
-    results = load_results(args.csv, args.run_overrides, args.on_config, all_seed=args.all_seed)
+    results = load_results(args.csv, args.run_overrides, args.on_config, all_seed=args.all_seed,
+                           baseline_pairings_path=args.baseline_pairings)
     original = args.tex.read_bytes()
     lines = original.decode("utf-8").splitlines(keepends=True)
     updated = update_table(lines, results)
@@ -294,7 +299,7 @@ def main(argv=None):
               "Remove lowest/highest/next-lowest/next-highest scores alternately.")
     for key, scores in sorted(results.items()):
         seed_note = (f"OFF seeds {', '.join(scores.baseline_seeds)}; "
-                     f"ON seeds {', '.join(scores.enabled_seeds)}" if args.all_seed else
+                     f"ON seeds {', '.join(scores.enabled_seeds)}" if args.all_seed or scores.baseline_seeds != scores.enabled_seeds else
                      f"seeds {', '.join(scores.baseline_seeds)}")
         print(f"{key}: {seed_note}; OFF={mean(scores.baseline):.6g}, ON={mean(scores.enabled):.6g}")
     rows = main_table_rows(updated)

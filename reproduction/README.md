@@ -2,10 +2,12 @@
 
 `N_train.sh`는 GPU별로 `reproduce.py` worker를 실행합니다. 각 서버의 worker는
 로컬 `state.json`을 공유합니다. 서버 간에는 `servers.json`의 게임 배정과
-`reports/a.json`, `b.json`, `c.json`의 작은 결과 요약만 Git으로 교환합니다.
+`reports/a.json`, `b.json`, `c.json`의 작은 결과 요약을 Git으로 교환합니다.
+담당 서버를 바꿀 때는 `handoffs/<game>.json`으로 점수·시드 이력도 교환합니다.
 `job_queue_3090.txt`와 다른 `job_queue_*.txt`는 이 실행에서 사용하지 않습니다.
 
-배정은 A(4 GPU) 11게임, B(4 GPU) 12게임, C(1 GPU) 3게임입니다.
+배정은 A(4 GPU) 11게임, B(4 GPU) 13게임, C(1 GPU) 2게임입니다.
+Gopher는 C에서 Seaquest와 함께 실행하며, Road Runner와 Up N Down은 B 담당입니다.
 서버 A는 RTX 3090 서버, B는 RTX A6000 서버, C는 나머지 1-GPU 서버입니다.
 게임 배정은 이 역할 등록으로 결정하며, 학습 시작 시 선택한 GPU 모델과
 PyTorch의 CUDA 인식도 검사합니다. Gopher는 기준을 통과한 full FLASH와 baseline의
@@ -14,10 +16,91 @@ PyTorch의 CUDA 인식도 검사합니다. Gopher는 기준을 통과한 full FL
 같은 횟수이면 담당 게임 목록의 순서를 따릅니다. 다른 게임이 아직 학습 중이어도
 이미 끝난 게임은 다음 시드를 실행할 수 있습니다. 단, 같은 게임의 retrieval와
 조건부 baseline이 끝나기 전에는 그 게임의 다음 시드를 동시에 실행하지 않습니다.
-게임별 시드는 `3090, 3100, 3110, ...`입니다. 성공 시드 4개 확보,
-baseline 조건, full FLASH 점수 상위 4개 보관 규칙은 그대로 적용합니다.
+게임별 시드는 `3090, 3100, 3110, ...` 순서이며 기존에 사용한 시드는 건너뜁니다.
+**성공한 baseline–full FLASH 쌍이 누적 4개가 되면 해당 게임의 학습을 종료합니다.**
+조건 2로 완성한 쌍과 산출물이 정리된 과거 쌍, 다른 서버에서 넘겨받은 완료 쌍도
+4개에 포함합니다. baseline 점수 자체는 성공 여부에 영향을 주지 않습니다.
+
+baseline은 다음 중 하나만 만족하면 실행합니다.
+
+1. 이번 full FLASH의 HNS가 논문 HNS − 0.1 이상.
+2. 같은 게임에서 기존에 완료한 모든 baseline–full FLASH 쌍의 **full FLASH 점수**에
+   이번 full FLASH 점수를 더한 평균의 HNS가 논문 HNS + 0.1 이상.
+
+평균은 상위 4개 보관 여부와 관계없이 모든 완료 쌍을 포함합니다. baseline이 없는
+시드, 다른 게임, baseline 점수는 제외합니다. 판정 시 사용한 시드·평균과 통과
+사유를 trial의 `baseline_gate`에 저장하므로 재개해도 같은 판정을 사용합니다.
+산출물은 현재 서버에서 full FLASH 점수 상위 4개를 보관하되, 이번 시드의
+조건부 baseline이 끝나기 전에 warmup을 삭제하지 않습니다.
+
+## 기존 B/C 배정 변경 적용
+
+기존 상태를 초기화하거나 `setup --reset`을 실행하지 않습니다. 원래 서버의
+체크포인트·shared replay 경로는 보존하고 숫자 기록만 새 담당 서버에 넘깁니다.
+수신 서버는 완료 쌍을 평균·종료 판정에 포함하고, 미완료 시드도 사용한 시드로
+예약하여 새로운 시드에서 학습을 시작합니다. 미완료 분기의 체크포인트를 다른
+서버에서 이어 학습하는 방식은 아닙니다.
+
+엑셀은 Git에서 제외되어 있으므로, 현재 엑셀에 있는 시드 목록을
+`seed_reservations.json`에도 기록했습니다. 로컬 엑셀이 있으면 그 시드까지 합쳐
+중복을 피합니다. Gopher의 `3090, 3100, 3110, 3120, 9997`을 예약하며
+`3110-old`도 3110으로 보호합니다. 현재 기록 기준 다음 Gopher 시드는 3130이며,
+B에서 더 진행했다면 handoff에 포함된 실제 이력 이후의 시드를 선택합니다.
+엑셀 자체와 과거 평가 결과는 수정하지 않습니다.
+
+아래 명령은 TWISTER 디렉터리에서 의존성이 설치된 Python 환경으로 실행합니다.
+
+1. **C에서** Seaquest의 현재 trial(조건부 baseline까지)을 마친 뒤 기존 worker를
+   종료합니다. 아래 handoff 자체는 Seaquest가 실행 중이어도 가능하며,
+   넘길 두 게임이 실제 실행 중이면 변경 없이 거절합니다.
+
+   ```bash
+   python reproduction_cluster.py handoff
+   git add reproduce.py reproduction_cluster.py reproduction_seeds.py README.md reproduction/README.md reproduction/servers.json reproduction/seed_reservations.json reproduction/test_reproduction.py reproduction/handoffs
+   git commit -m "Update reproduction gates and reassign B/C games"
+   git push
+   ```
+
+2. **B에서** 기존 worker들을 종료한 뒤 최신 코드와 C의 숫자 이력을 받습니다.
+   가능하면 진행 중인 Gopher trial을 마친 뒤 종료하세요. 중단된 채 넘겨도
+   기존 파일은 보존하며, 그 시드는 C에서 다시 배정하지 않습니다.
+
+   ```bash
+   git pull --rebase
+   python reproduction_cluster.py handoff
+   python reproduction_cluster.py sync
+   ```
+
+   `sync`는 B의 Gopher 이력을 커밋·push하고, B에 Road Runner와 Up N Down을
+   반영합니다. 이후 GPU별 기존 터미널에서 각각 `./0_train.sh`부터
+   `./3_train.sh`까지 다시 실행합니다.
+
+3. **C에서** B가 공개한 Gopher 이력을 받아 배정을 적용하고 재시작합니다.
+
+   ```bash
+   git pull --rebase
+   python reproduction_cluster.py sync
+   ./0_train.sh
+   ```
+
+   C는 Seaquest와 Gopher만 담당합니다. 아직 완료하지 않은 Seaquest trial이
+   있으면 먼저 재개하고, 이후 첫 성공 쌍이 없는 Gopher를 우선 실행합니다.
+   상대 서버의 handoff 파일이 없으면 학습 시작 전에 필요한 서버/명령을
+   안내하고 종료하므로, 오래된 보고서만 보고 시드를 다시 시작하지 않습니다.
+
+4. **A에서도** `git pull --rebase` 후 기존 worker를 재시작해야 새 baseline 조건과
+   누적 4쌍 종료 기준이 적용됩니다. A의 게임 배정은 동일합니다.
+
+학습 없이 검증하려면:
+
+```bash
+python -m unittest discover -s reproduction -p 'test_*.py' -v
+```
 
 ## 최초 한 번
+
+기존 배정 변경은 위 절차를 사용합니다. 새 B/C 설치는 원래 서버의 handoff
+파일까지 배포한 뒤 등록합니다.
 
 이 코드와 `servers.json`을 같은 Git 브랜치로 세 서버에 배포한 뒤 TWISTER
 의존성과 ROM이 설치된 Python 환경에서 실행합니다. 아래 a/b/c는 GPU 번호가
@@ -87,8 +170,8 @@ GPU이면 `N_train.sh`는 학습을 시작하지 않습니다.
 ```
 
 기존 worker들과 같은 상태 파일에서 다음 작업 한 건을 중복 없이 가져옵니다.
-shared warmup → full FLASH 학습/최종 평가 → 논문 HNS − 0.1 이상일 때 같은
-warmup에서 baseline 실행까지 마친 뒤 종료합니다. 기준 미달이면 baseline을
+shared warmup → full FLASH 학습/최종 평가 → 두 조건 중 하나를 만족하면 같은
+warmup에서 baseline 실행까지 마친 뒤 종료합니다. 두 조건 모두 미달이면 baseline을
 생략하고 종료합니다. 결과는 정규 실행과 같은 완료/성공 통계, W&B 설정,
 게임별 상위 4개 보관 규칙에 포함되며 다음 sync에서 공유됩니다.
 
@@ -107,7 +190,7 @@ warmup에서 baseline 실행까지 마친 뒤 종료합니다. 기준 미달이�
 에피소드가 끝나면 차례로 멈추고, 모든 환경이 멈춘 뒤 shared warmup을 저장합니다.
 
 학습 한도를 다 쓸 때까지 경계를 만들지 못하면, 해당 시드의 full FLASH를
-처음부터 다시 학습합니다. 이 결과가 논문 HNS − 0.1 이상일 때만 baseline 점수를
+처음부터 다시 학습합니다. 이 결과가 위의 두 조건 중 하나를 만족할 때만 baseline 점수를
 구합니다. warmup이 환경 일시 정지·수집 재개 없이 전체 학습 예산을 채웠다면,
 이미 retrieval OFF로 학습한 모델이므로 마지막 체크포인트를 100회 최종 평가합니다.
 baseline을 다시 학습하지 않습니다. 조건을 확인할 수 없거나 warmup이 미완료이면
@@ -174,10 +257,10 @@ C는 move 직후 로컬 큐에서 그 게임을 제외하므로, Git을 공유�
 3090부터 시작합니다. 현재 실행 중인 worker는 최신 코드로 재시작해야 이 규칙을
 적용받습니다.
 
-이미 시작한 게임은 이동을 거절합니다. 해당 게임의 shared replay가 절대 경로로
+일반 `move`는 이미 시작한 게임의 이동을 거절합니다. 해당 게임의 shared replay가 절대 경로로
 참조되고, 상위 4개 산출물이 원래 서버에 있기 때문입니다. 이 경우 각 서버는
-자기 게임의 다음 라운드를 계속 진행하면 됩니다. `servers.json`을 직접 편집해
-실행 중인 게임의 담당 서버를 바꾸지 마세요.
+자기 게임의 다음 라운드를 계속 진행하면 됩니다. 이미 시작한 B/C 게임의
+배정 변경은 위의 `handoff` 절차를 사용합니다.
 
 서버 B/C로 이 저장소를 옮길 때는 Git에 포함된 파일만 옮기세요. 다른 서버의
 `reproduction.local.json`이나 `results/reproduction/`을 복사하면 로컬 실행 상태가

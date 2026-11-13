@@ -23,7 +23,6 @@
       "gpu_model": "A6000",
       "games": [
         "frostbite",
-        "gopher",
         "hero",
         "jamesbond",
         "kangaroo",
@@ -33,16 +32,22 @@
         "pong",
         "private_eye",
         "qbert",
-        "freeway"
+        "freeway",
+        "road_runner",
+        "up_n_down"
       ]
     },
     "c": {
       "gpus": 1,
       "games": [
-        "road_runner",
         "seaquest",
-        "up_n_down"
+        "gopher"
       ]
     }
+  },
+  "handoffs": {
+    "gopher": {"source": "b", "target": "c"},
+    "road_runner": {"source": "c", "target": "b"},
+    "up_n_down": {"source": "c", "target": "b"}
   }
 }

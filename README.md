@@ -94,7 +94,8 @@ Use a Python environment with the TWISTER dependencies and Atari ROMs:
 Until Gopher has its first qualifying full FLASH result and completed baseline,
 workers give idle Gopher priority. Otherwise they prefer unfinished, idle games
 with the fewest previous attempts, using the configured game order to break ties.
-Each game's seeds are 3090, 3100, 3110, and so on. Completed games can start
+Each game's seeds advance in steps of 10 from 3090, skipping existing local,
+transferred and Excel-reserved seeds. Completed games can start
 their next seed while other games are still finishing their first.
 One game has at most one active trial, including its conditional baseline.
 The reported round is the highest trial round started on this server; games can
@@ -102,17 +103,26 @@ be in different rounds. Multiple workers share locks across GPU models.
 
 For each trial, save shared warmup, finish full FLASH (retrieval ON), and run the
 final evaluation (100 episodes by default). Start baseline (retrieval OFF) from
-**the same shared warmup** only when
-`full_FLASH_score >= paper_score - 0.1 * (human_score - random_score)`.
+**the same shared warmup** when either condition holds:
+
+1. `full_FLASH_score >= paper_score - 0.1 * (human_score - random_score)`.
+2. The mean full FLASH score over **all previously completed ON/OFF pairs for
+   this game, plus this trial**, is at least
+   `paper_score + 0.1 * (human_score - random_score)`.
+
+Unpaired results and baseline scores are excluded from that mean. Pruned pairs
+and numeric history transferred from another server are included. The gate is
+saved before baseline starts and reused after an interruption.
 This is an absolute HNS margin of 0.1, not 10% of the paper score. Reference
 values come from `REFERENCE_SCORES` in `results/convert_csv_to_excel.py` and are
-saved with the search settings. A game leaves the search after four qualifying
-full FLASH seeds and their completed baselines. Baseline score does not affect
-qualification or ranking.
+saved with the search settings. A game stops immediately after **four completed
+ON/OFF pairs in total**, including mean-qualified pairs and pruned historical
+pairs. Baseline score does not affect qualification or ranking. The top-four
+artifact policy is independent of this cumulative stopping count.
 
 If shared warmup cannot reach completed episode boundaries before the training
 budget ends, the worker trains full FLASH from step zero with the same seed.
-Only if that result passes the usual gate does it obtain baseline's final score.
+Only if that result passes either gate does it obtain baseline's final score.
 A full-budget warmup that never paused an environment or resumed collection is
 already a retrieval-OFF agent: its checkpoint is evaluated without more training.
 If that condition cannot be verified, baseline trains from step zero with the
@@ -124,11 +134,13 @@ Other training errors stop the worker as before.
 
 Keep only the **four highest full FLASH scores per game**, even when all four
 are below the qualification threshold. Keep all trials until four scored trials
-exist. After a fifth finishes full FLASH evaluation, prune the lower scoring
+exist. After a fifth finishes its conditional baseline (or skips baseline), prune the lower scoring
 trial's complete artifact directory: warmup/replay, resume/final checkpoints,
 ON/OFF outputs, and local logs. Ties favor the earlier trial. The active trial
 can temporarily be a fifth directory while it trains. Numeric results remain in
-the state file after pruning. Existing runs outside this search are untouched.
+the state file after pruning and still count toward the mean and stopping rule.
+Existing runs outside this search are untouched. Released games' original
+artifacts stay on their source server; handoffs transfer numeric history only.
 
 State defaults to `results/reproduction/state.json`; artifacts are grouped under
 `callbacks/reproduction/<search_id>/<game>/round_<N>/`. Each retained round's
@@ -160,7 +172,8 @@ interrupted. Its checkpoint is hard-linked into the baseline directory and
 `training_source.json` records its origin. No rolling pre-warmup snapshot is maintained; see the
 [measured recovery costs](reproduction/warmup_fallback_cost.md).
 
-Offline control-flow/retention tests: `python -m unittest discover -s validation -v`.
+Offline scheduler, gate, retention and handoff tests:
+`python -m unittest discover -s reproduction -p 'test_*.py' -v`.
 
 ### GPU job queues
 

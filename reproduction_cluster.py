@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent server campaigns, small Git reports, and unstarted-game handoffs."""
+"""Independent server campaigns, numeric history handoffs, and Git reports."""
 
 import argparse
 from datetime import datetime, timezone
@@ -11,6 +11,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import uuid
 
 import reproduce
 from run_results import write_json
@@ -22,6 +23,12 @@ def plan_path():
 
 def settings_path():
     return reproduce.ROOT / "reproduction.local.json"
+
+
+def handoff_path(game):
+    if game not in reproduce.references():
+        raise ValueError(f"Unknown handoff game: {game}")
+    return reproduce.ROOT / "reproduction/handoffs" / f"{game}.json"
 
 
 def local_settings():
@@ -44,26 +51,161 @@ def load_plan():
         assigned.extend(entry["games"])
     if len(assigned) != len(set(assigned)) or set(assigned) != set(reproduce.references()):
         raise ValueError("Server plan must assign each of the 26 games exactly once")
+    for game, handoff in plan.get("handoffs", {}).items():
+        if (game not in assigned or handoff.get("source") not in plan["servers"]
+                or handoff.get("target") not in plan["servers"]
+                or handoff["source"] == handoff["target"]
+                or game not in plan["servers"][handoff["target"]]["games"]):
+            raise ValueError(f"Invalid handoff: {game}")
     return plan
 
 
 def apply_assignment(state, plan=None):
-    """Called under the local campaign lock; a started game keeps its owner."""
+    """Adopt released numeric history, leaving original artifacts in place."""
     plan = load_plan() if plan is None else plan
     server = state["config"]["server"]
     if server not in plan["servers"]:
         raise ValueError(f"Server {server} is missing from the plan")
     games = plan["servers"][server]["games"]
+    handoffs = plan.get("handoffs", {})
+    outgoing = {game for game, move in handoffs.items() if move["source"] == server}
     started = {trial["game"] for trial in state["trials"]}
-    if started - set(games):
-        raise ValueError("Cannot transfer games with training history: " + ", ".join(sorted(started - set(games))))
-    if state["config"]["games"] == games:
-        return False
+    unreleased = (outgoing & (set(state["config"]["games"]) | started)) - set(state.get("released_games", {}))
+    if unreleased:
+        raise ValueError("Release outgoing history first with python reproduction_cluster.py handoff: "
+                         + ", ".join(sorted(unreleased)))
+    if started - set(games) - set(state.get("released_games", {})):
+        raise ValueError("Cannot transfer games without an explicit history handoff")
+    changed = state["config"]["games"] != games
+    # Validate all incoming snapshots before changing local assignment/history.
+    incoming = []
+    for game, move in handoffs.items():
+        if move["target"] != server:
+            continue
+        path = handoff_path(game)
+        if not path.is_file():
+            raise ValueError(f"{game} history is not ready. Run python reproduction_cluster.py handoff "
+                             f"on {move['source']}, publish its handoff files, then pull here.")
+        snapshot = json.loads(path.read_text(encoding="utf-8"))
+        validate_handoff(snapshot, game, move)
+        imported = state.get("imported_handoffs", {}).get(game)
+        if imported == snapshot["id"]:
+            continue
+        if imported is not None:
+            raise ValueError(f"Refusing to replace already imported {game} history")
+        local_seeds = {trial["seed"] for trial in state["trials"] if trial["game"] == game}
+        if local_seeds & {trial["seed"] for trial in snapshot["trials"]}:
+            raise ValueError(f"Local {game} seeds overlap the source history; preserve both states for inspection")
+        reference = state["config"]["references"].get(game, reproduce.references()[game])
+        if reference != snapshot["reference"]:
+            raise ValueError(f"Paper references differ for {game}")
+        incoming.append((game, snapshot))
+    for game, snapshot in incoming:
+        state.setdefault("imported_history", {})[game] = snapshot["trials"]
+        state.setdefault("imported_handoffs", {})[game] = snapshot["id"]
+        reserved = set(state.get("reserved_seeds", {}).get(game, ())) | set(snapshot["reserved_seeds"])
+        state.setdefault("reserved_seeds", {})[game] = sorted(reserved)
+        changed = True
     state["config"]["games"] = list(games)
     table = reproduce.references()
     for game in games:
         state["config"]["references"].setdefault(game, table[game])
-    return True
+    return changed
+
+
+def validate_handoff(snapshot, game, move):
+    if (snapshot.get("version") != 1 or snapshot.get("game") != game
+            or snapshot.get("source") != move["source"] or snapshot.get("target") != move["target"]
+            or not isinstance(snapshot.get("id"), str) or not snapshot["id"]
+            or snapshot.get("reference") != reproduce.references()[game]):
+        raise ValueError(f"Invalid numeric history handoff for {game}")
+    seeds = set()
+    for trial in snapshot["trials"]:
+        seed = reproduce.validate_seed(trial["seed"])
+        if (seed is None or seed in seeds or trial["game"] != game
+                or type(trial["round"]) is not int or trial["round"] < 1
+                or trial["status"] not in {"complete", "released"}):
+            raise ValueError(f"Invalid or duplicate seed in {game} history")
+        seeds.add(seed)
+        for result in (trial["full_flash"], trial["baseline"]):
+            if result is not None:
+                score = result["score"] if "score" in result else result["metrics"]["score"]
+                reproduce.compare_score(score, snapshot["reference"])
+        if trial["baseline"] is not None and trial["full_flash"] is None:
+            raise ValueError(f"Baseline without full FLASH in {game} history")
+    for seed in snapshot["reserved_seeds"]:
+        if reproduce.validate_seed(seed) is None:
+            raise ValueError(f"Missing reserved seed in {game} history")
+
+
+def release_history(campaign, settings):
+    """Freeze outgoing scores/seeds; never move/delete checkpoints or replay."""
+    from reproduction_seeds import occupied_seeds
+
+    plan = load_plan()
+    server = settings["server"]
+    moves = {game: move for game, move in plan.get("handoffs", {}).items() if move["source"] == server}
+    if not moves:
+        print(f"Server {server} has no outgoing history handoffs.")
+        return
+    leases = []
+    try:
+        with campaign.locked():
+            state = campaign.read()
+            if state["config"].get("server") != server:
+                raise ValueError("Campaign/server identity mismatch")
+            for trial in state["trials"]:
+                if trial["game"] in moves:
+                    lease = campaign._lease(trial)
+                    if lease is None:
+                        raise ValueError(f"{trial['game']} is still running. Finish or stop its worker before handoff.")
+                    leases.append(lease)
+            occupied = occupied_seeds(reproduce.ROOT)
+            snapshots = {}
+            for game, move in moves.items():
+                released = state.get("released_games", {}).get(game)
+                path = handoff_path(game)
+                if released and path.is_file():
+                    snapshot = json.loads(path.read_text(encoding="utf-8"))
+                    validate_handoff(snapshot, game, move)
+                    if snapshot["id"] != released or snapshot["search_id"] != state["search_id"]:
+                        raise ValueError(f"Handoff does not belong to this campaign: {game}")
+                    snapshots[game] = snapshot
+                    continue
+                records = []
+                for trial in reproduce.game_trials(state, game):
+                    full = trial["full_flash"]
+                    baseline = trial["baseline"]
+                    records.append(dict(
+                        game=game, seed=trial["seed"], round=trial["round"],
+                        status="complete" if trial["status"] == "complete" else "released",
+                        retained=False,
+                        full_flash=None if full is None else reproduce.compare_score(full["score"], state["config"]["references"][game]),
+                        baseline=None if baseline is None else dict(metrics=dict(score=baseline["metrics"]["score"]))))
+                snapshot = dict(version=1, id=released or uuid.uuid4().hex, game=game,
+                                source=server, target=move["target"], search_id=state["search_id"],
+                                reference=state["config"]["references"].get(game, reproduce.references()[game]),
+                                trials=records, reserved_seeds=sorted(
+                                    set(occupied.get(game, ())) | {trial["seed"] for trial in records}
+                                    | set(state.get("reserved_seeds", {}).get(game, ()))))
+                validate_handoff(snapshot, game, move)
+                snapshots[game] = snapshot
+            for game, snapshot in snapshots.items():
+                state.setdefault("released_games", {})[game] = snapshot["id"]
+            # Release locally before making any snapshot available for Git.
+            write_json(campaign.path, state)
+            for game, snapshot in snapshots.items():
+                write_json(handoff_path(game), snapshot)
+    finally:
+        for lease in leases:
+            lease.close()
+    settings["pending_handoffs"] = sorted(set(settings.get("pending_handoffs", ())) | set(moves))
+    write_json(settings_path(), settings)
+    for game, snapshot in snapshots.items():
+        print(f"Released {game}: {server} -> {snapshot['target']}; "
+              f"{len(snapshot['trials'])} attempts, original artifacts preserved.")
+    print("Publish reproduction/handoffs/*.json together with the updated code/plan. "
+          "The receiver imports scores and reserves all prior seeds on restart.")
 
 
 def attach_server(campaign, server):
@@ -180,8 +322,9 @@ def export_report(campaign, server):
             write_json(campaign.path, state)
         games = {}
         for game in state["config"]["games"]:
-            trials = [trial for trial in state["trials"] if trial["game"] == game]
-            top = reproduce.retained_trials(state, game)
+            trials = sorted(reproduce.game_trials(state, game), key=lambda trial: (trial["round"], trial["seed"]))
+            top = sorted((trial for trial in trials if trial["full_flash"] is not None),
+                         key=lambda trial: (-trial["full_flash"]["score"], trial["round"]))[:reproduce.KEEP]
             games[game] = dict(
                 attempts=len(trials), completed=sum(trial["status"] == "complete" for trial in trials),
                 successful_pairs=len(reproduce.successful_trials(state, game)),
@@ -229,7 +372,7 @@ def move_game(campaign, settings, game, target):
         source = plan["servers"][server]["games"]
         if game not in source:
             raise ValueError("Run move on the server that currently owns this game")
-        if any(trial["game"] == game for trial in state["trials"]):
+        if reproduce.game_trials(state, game):
             raise ValueError("This game has already started; keep its parameters/replay on its current server")
         if len(source) == 1:
             raise ValueError("Each server must retain at least one game")
@@ -255,6 +398,8 @@ def sync_git(campaign, settings):
     paths = [str(report.relative_to(reproduce.ROOT))]
     if settings.get("pending_plan"):
         paths.append(str(plan_path().relative_to(reproduce.ROOT)))
+    for game in settings.get("pending_handoffs", ()):
+        paths.append(str(handoff_path(game).relative_to(reproduce.ROOT)))
     # Commit only our report/explicit handoff. Leave unrelated work alone.
     dirty = set()
     for arguments in (("diff", "--name-only", "-z"), ("diff", "--cached", "--name-only", "-z")):
@@ -276,6 +421,7 @@ def sync_git(campaign, settings):
         pushed = git("push", check=False)
         if pushed.returncode == 0:
             settings.pop("pending_plan", None)
+            settings.pop("pending_handoffs", None)
             write_json(settings_path(), settings)
             attach_server(campaign, server)
             return
@@ -298,6 +444,7 @@ def main(argv=None):
     move = commands.add_parser("move", help="Hand off an unstarted game from this server")
     move.add_argument("game")
     move.add_argument("target", choices=("a", "b", "c"))
+    commands.add_parser("handoff", help="Release the plan's outgoing games with all numeric history; preserve local artifacts")
     args = parser.parse_args(argv)
     if args.command == "setup":
         setup_server(reproduce.Campaign(args.state), args.server, reset=args.reset)
@@ -313,7 +460,9 @@ def main(argv=None):
     lock_path = campaign.path.parent / "cluster_sync.lock"
     with lock_path.open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if args.command == "move":
+        if args.command == "handoff":
+            release_history(campaign, settings)
+        elif args.command == "move":
             move_game(campaign, settings, args.game, args.target)
         elif args.local_only:
             export_report(campaign, settings["server"])

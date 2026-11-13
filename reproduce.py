@@ -66,9 +66,46 @@ def retained_trials(state, game):
 
 
 def successful_trials(state, game):
-    return [trial for trial in retained_trials(state, game)
-            if trial["full_flash"]["passes"] and trial["baseline"] is not None
+    # Numeric history survives pruning and server handoffs. Every completed
+    # ON/OFF pair counts, including pairs accepted by the mean-score gate.
+    return [trial for trial in game_trials(state, game)
+            if trial["full_flash"] is not None and trial["baseline"] is not None
             and trial["status"] == "complete"]
+
+
+def game_trials(state, game):
+    trials = [trial for trial in state["trials"] if trial["game"] == game]
+    history = state.get("imported_history", {}).get(game, [])
+    return trials + history
+
+
+def baseline_gate(state, trial):
+    previous = [item for item in successful_trials(state, trial["game"])
+                if item["seed"] != trial["seed"]]
+    scores = [item["full_flash"]["score"] for item in previous] + [trial["full_flash"]["score"]]
+    mean_score = math.fsum(scores) / len(scores)
+    comparison = compare_score(mean_score, state["config"]["references"][trial["game"]])
+    random, human, paper = state["config"]["references"][trial["game"]]
+    minimum_mean = paper + HNS_MARGIN * (human - random)
+    individual = trial["full_flash"]["passes"]
+    mean_passes = bool(previous) and mean_score >= minimum_mean
+    return dict(accepted=individual or mean_passes, individual_passes=individual,
+                mean_passes=mean_passes, previous_pair_seeds=[item["seed"] for item in previous],
+                mean_score=mean_score, mean_hns=comparison["hns"], minimum_mean_score=minimum_mean)
+
+
+def next_seed(state, game):
+    from reproduction_seeds import occupied_seeds
+
+    start = state["config"]["start_seed"]
+    step = state["config"].get("seed_step", 1)
+    used = {trial["seed"] for trial in game_trials(state, game)}
+    seed = max([start] + [value + step for value in used if value >= start and (value - start) % step == 0])
+    occupied = (used | set(state.get("reserved_seeds", {}).get(game, ()))
+                | set(occupied_seeds(ROOT).get(game, ())))
+    while seed in occupied:
+        seed += step
+    return validate_seed(seed)
 
 
 def artifact_dir(state, trial):
@@ -111,8 +148,11 @@ class Campaign:
         games = state["config"]["games"]
         if not games or len(set(games)) != len(games) or set(games) - set(references()):
             raise ValueError("Invalid campaign game list")
+        known_games = set(references())
         for trial in state["trials"]:
-            if trial["game"] not in games or type(trial["round"]) is not int or trial["round"] < 1:
+            # Released trials remain on their original server with all paths
+            # intact; only config.games determines which work may be claimed.
+            if trial["game"] not in known_games or type(trial["round"]) is not int or trial["round"] < 1:
                 raise ValueError("Invalid trial identity")
             validate_seed(trial["seed"])
         return state
@@ -157,7 +197,7 @@ class Campaign:
 
     def _cleanup(self, state):
         for trial in state["trials"]:
-            if not trial.get("cleanup_pending"):
+            if trial["game"] not in state["config"]["games"] or not trial.get("cleanup_pending"):
                 continue
             directory = artifact_dir(state, trial)
             if directory.is_symlink() or directory.resolve() != directory:
@@ -191,7 +231,7 @@ class Campaign:
             # cannot let another GPU reuse this trial while training is alive.
             active_games = set()
             for trial in state["trials"]:
-                if trial["status"] != "complete":
+                if trial["game"] in state["config"]["games"] and trial["status"] != "complete":
                     active_games.add(trial["game"])
                     lease = self._lease(trial)
                     if lease is not None:
@@ -207,18 +247,14 @@ class Campaign:
                 return "wait", state, None, None
             # Prioritize idle Gopher until its first successful ON/OFF pair.
             # Otherwise prefer fewer attempts, then the configured game order.
-            attempts = {game: sum(trial["game"] == game for trial in state["trials"])
-                        for game in ready}
+            attempts = {game: len(game_trials(state, game)) for game in ready}
             game = min(ready, key=lambda game: (
                 not (game == "gopher" and not successful_trials(state, game)),
                 attempts[game]))
             # Keep legacy artifact/lease round numbers unique, even for games
             # assigned late under the old server-wide round counter.
-            round_number = 1 + max((trial["round"] for trial in state["trials"]
-                                    if trial["game"] == game), default=0)
-            seed = (state["config"]["start_seed"]
-                    + attempts[game] * state["config"].get("seed_step", 1))
-            validate_seed(seed)
+            round_number = 1 + max((trial["round"] for trial in game_trials(state, game)), default=0)
+            seed = next_seed(state, game)
             trial = dict(game=game, seed=seed, round=round_number, status="running",
                          stage="warmup", full_flash=None, baseline=None, retained=True,
                          worker=f"{socket.gethostname()}:{os.getpid()}", error=None)
@@ -236,11 +272,24 @@ class Campaign:
             saved = next(item for item in state["trials"]
                          if (item["game"], item["round"]) == (trial["game"], trial["round"]))
             saved.update(changes)
-            for loser in retained_trials(state, trial["game"])[KEEP:]:
-                loser.update(retained=False, cleanup_pending=True)
+            # A low-scoring fifth result can still qualify through the mean
+            # gate. Keep its shared warmup until its baseline has finished.
+            if saved["status"] == "complete":
+                for loser in retained_trials(state, trial["game"])[KEEP:]:
+                    loser.update(retained=False, cleanup_pending=True)
             # Persist the numeric result and deletion intent before removing data.
             write_json(self.path, state)
             self._cleanup(state)
+            return dict(saved)
+
+    def prepare_baseline(self, trial):
+        with self.locked():
+            state = self.read()
+            saved = next(item for item in state["trials"]
+                         if (item["game"], item["round"]) == (trial["game"], trial["round"]))
+            if "baseline_gate" not in saved:
+                saved["baseline_gate"] = baseline_gate(state, saved)
+                write_json(self.path, state)
             return dict(saved)
 
 
@@ -416,7 +465,12 @@ def run_trial(campaign, state, trial, lease):
         trial = campaign.update(trial, full_flash=comparison)
         print(f"{trial['game']} seed {trial['seed']}: full FLASH={comparison['score']}, "
               f"delta HNS={comparison['delta_hns']:+.6f}, passes={comparison['passes']}", flush=True)
-    if trial["full_flash"]["passes"] and trial["retained"] and trial["baseline"] is None:
+    trial = campaign.prepare_baseline(trial)
+    gate = trial["baseline_gate"]
+    print(f"{trial['game']} seed {trial['seed']}: baseline gate accepted={gate['accepted']}, "
+          f"individual={gate['individual_passes']}, paired mean={gate['mean_passes']} "
+          f"(mean HNS={gate['mean_hns']:.6f}, previous pairs={len(gate['previous_pair_seeds'])})", flush=True)
+    if gate["accepted"] and trial["baseline"] is None:
         campaign.update(trial, stage="baseline")
         result_path = paths["baseline"] / "final_evaluation.json"
         if not result_path.is_file():

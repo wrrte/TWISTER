@@ -3,16 +3,16 @@
   "server": "c",
   "search_id": "search_c7a15c343a18433ba72f14ac26630fea",
   "round": 2,
-  "updated_at": "2026-11-13T01:29:21+00:00",
+  "updated_at": "2026-11-13T01:46:44+00:00",
   "games": {
     "seaquest": {
-      "attempts": 2,
+      "attempts": 1,
       "completed": 1,
       "successful_pairs": 1,
       "latest": {
-        "seed": 3100,
-        "status": "running",
-        "stage": "warmup"
+        "seed": 3090,
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {

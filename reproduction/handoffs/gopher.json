@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "id": "eb5d67191a8840b6966e985caab6fbc3",
+  "game": "gopher",
+  "source": "b",
+  "target": "c",
+  "search_id": "search_55ef5d85540b44deb4e3af0ae3b0ecc8",
+  "reference": [
+    258,
+    2412,
+    22234
+  ],
+  "trials": [
+    {
+      "game": "gopher",
+      "seed": 3090,
+      "round": 1,
+      "status": "complete",
+      "retained": false,
+      "full_flash": {
+        "score": 2911.0,
+        "hns": 1.2316620241411327,
+        "paper_hns": 10.202414113277623,
+        "delta_hns": -8.970752089136491,
+        "minimum_score": 22018.6,
+        "passes": false
+      },
+      "baseline": null
+    },
+    {
+      "game": "gopher",
+      "seed": 3100,
+      "round": 2,
+      "status": "complete",
+      "retained": false,
+      "full_flash": {
+        "score": 8059.4,
+        "hns": 3.621819870009285,
+        "paper_hns": 10.202414113277623,
+        "delta_hns": -6.580594243268338,
+        "minimum_score": 22018.6,
+        "passes": false
+      },
+      "baseline": null
+    },
+    {
+      "game": "gopher",
+      "seed": 3110,
+      "round": 3,
+      "status": "complete",
+      "retained": false,
+      "full_flash": {
+        "score": 2213.6,
+        "hns": 0.9078922934076137,
+        "paper_hns": 10.202414113277623,
+        "delta_hns": -9.29452181987001,
+        "minimum_score": 22018.6,
+        "passes": false
+      },
+      "baseline": null
+    },
+    {
+      "game": "gopher",
+      "seed": 3120,
+      "round": 4,
+      "status": "released",
+      "retained": false,
+      "full_flash": null,
+      "baseline": null
+    }
+  ],
+  "reserved_seeds": [
+    3090,
+    3100,
+    3110,
+    3120,
+    9997
+  ]
+}

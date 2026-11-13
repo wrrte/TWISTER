@@ -2,17 +2,17 @@
   "version": 1,
   "server": "b",
   "search_id": "search_55ef5d85540b44deb4e3af0ae3b0ecc8",
-  "round": 3,
-  "updated_at": "2026-11-11T07:46:44+00:00",
+  "round": 4,
+  "updated_at": "2026-11-13T01:28:12+00:00",
   "games": {
     "frostbite": {
       "attempts": 3,
-      "completed": 2,
-      "successful_pairs": 2,
+      "completed": 3,
+      "successful_pairs": 3,
       "latest": {
         "seed": 3110,
-        "status": "interrupted",
-        "stage": "warmup"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
@@ -26,41 +26,23 @@
           "score": 322.3,
           "delta_hns": 0.004051522248243562,
           "baseline_complete": true
-        }
-      ]
-    },
-    "gopher": {
-      "attempts": 3,
-      "completed": 2,
-      "successful_pairs": 0,
-      "latest": {
-        "seed": 3110,
-        "status": "running",
-        "stage": "warmup"
-      },
-      "top": [
-        {
-          "seed": 3100,
-          "score": 8059.4,
-          "delta_hns": -6.580594243268338,
-          "baseline_complete": false
         },
         {
-          "seed": 3090,
-          "score": 2911.0,
-          "delta_hns": -8.970752089136491,
-          "baseline_complete": false
+          "seed": 3110,
+          "score": 290.2,
+          "delta_hns": -0.0034660421545667473,
+          "baseline_complete": true
         }
       ]
     },
     "hero": {
       "attempts": 3,
-      "completed": 2,
-      "successful_pairs": 2,
+      "completed": 3,
+      "successful_pairs": 3,
       "latest": {
         "seed": 3110,
-        "status": "running",
-        "stage": "warmup"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
@@ -74,17 +56,23 @@
           "score": 13327.4,
           "delta_hns": 0.15283734353501793,
           "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 13134.9,
+          "delta_hns": 0.1463773952146045,
+          "baseline_complete": true
         }
       ]
     },
     "jamesbond": {
       "attempts": 3,
-      "completed": 2,
+      "completed": 3,
       "successful_pairs": 1,
       "latest": {
         "seed": 3110,
-        "status": "running",
-        "stage": "warmup"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
@@ -98,19 +86,31 @@
           "score": 472.0,
           "delta_hns": -0.3686131386861314,
           "baseline_complete": false
+        },
+        {
+          "seed": 3110,
+          "score": 161.0,
+          "delta_hns": -1.5036496350364963,
+          "baseline_complete": false
         }
       ]
     },
     "kangaroo": {
-      "attempts": 2,
-      "completed": 2,
-      "successful_pairs": 0,
+      "attempts": 3,
+      "completed": 3,
+      "successful_pairs": 1,
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "complete",
         "stage": "done"
       },
       "top": [
+        {
+          "seed": 3110,
+          "score": 7533.0,
+          "delta_hns": 0.5085484411666108,
+          "baseline_complete": true
+        },
         {
           "seed": 3100,
           "score": 2608.0,
@@ -126,11 +126,11 @@
       ]
     },
     "krull": {
-      "attempts": 2,
-      "completed": 2,
+      "attempts": 3,
+      "completed": 3,
       "successful_pairs": 0,
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "complete",
         "stage": "done"
       },
@@ -142,6 +142,12 @@
           "baseline_complete": false
         },
         {
+          "seed": 3110,
+          "score": 7020.4,
+          "delta_hns": -1.7028089887640452,
+          "baseline_complete": false
+        },
+        {
           "seed": 3090,
           "score": 5382.7,
           "delta_hns": -3.23623595505618,
@@ -150,13 +156,13 @@
       ]
     },
     "kung_fu_master": {
-      "attempts": 2,
+      "attempts": 3,
       "completed": 2,
       "successful_pairs": 1,
       "latest": {
-        "seed": 3100,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3110,
+        "status": "running",
+        "stage": "full_flash"
       },
       "top": [
         {
@@ -174,13 +180,13 @@
       ]
     },
     "ms_pacman": {
-      "attempts": 2,
+      "attempts": 3,
       "completed": 2,
       "successful_pairs": 2,
       "latest": {
-        "seed": 3100,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3110,
+        "status": "running",
+        "stage": "full_flash"
       },
       "top": [
         {
@@ -198,11 +204,11 @@
       ]
     },
     "pong": {
-      "attempts": 2,
-      "completed": 1,
+      "attempts": 3,
+      "completed": 2,
       "successful_pairs": 1,
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "running",
         "stage": "full_flash"
       },
@@ -212,15 +218,21 @@
           "score": 20.89,
           "delta_hns": 0.02472222222222224,
           "baseline_complete": true
+        },
+        {
+          "seed": 3100,
+          "score": 14.9,
+          "delta_hns": -0.14166666666666666,
+          "baseline_complete": false
         }
       ]
     },
     "private_eye": {
-      "attempts": 2,
-      "completed": 1,
-      "successful_pairs": 1,
+      "attempts": 3,
+      "completed": 2,
+      "successful_pairs": 2,
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "running",
         "stage": "full_flash"
       },
@@ -230,19 +242,31 @@
           "score": 100.0,
           "delta_hns": -0.021683490064130215,
           "baseline_complete": true
+        },
+        {
+          "seed": 3100,
+          "score": -795.04,
+          "delta_hns": -0.03455324533402352,
+          "baseline_complete": true
         }
       ]
     },
     "qbert": {
-      "attempts": 2,
-      "completed": 1,
-      "successful_pairs": 1,
+      "attempts": 3,
+      "completed": 2,
+      "successful_pairs": 2,
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "running",
-        "stage": "warmup"
+        "stage": "full_flash"
       },
       "top": [
+        {
+          "seed": 3100,
+          "score": 3820.25,
+          "delta_hns": 0.04689263411330976,
+          "baseline_complete": true
+        },
         {
           "seed": 3090,
           "score": 3650.0,
@@ -252,11 +276,11 @@
       ]
     },
     "freeway": {
-      "attempts": 2,
-      "completed": 1,
-      "successful_pairs": 1,
+      "attempts": 3,
+      "completed": 2,
+      "successful_pairs": 2,
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "running",
         "stage": "warmup"
       },
@@ -265,6 +289,54 @@
           "seed": 3090,
           "score": 31.9,
           "delta_hns": -0.003333333333333381,
+          "baseline_complete": true
+        },
+        {
+          "seed": 3100,
+          "score": 30.82,
+          "delta_hns": -0.039333333333333324,
+          "baseline_complete": true
+        }
+      ]
+    },
+    "road_runner": {
+      "attempts": 2,
+      "completed": 2,
+      "successful_pairs": 2,
+      "latest": {
+        "seed": 3100,
+        "status": "complete",
+        "stage": null
+      },
+      "top": [
+        {
+          "seed": 3100,
+          "score": 32661.0,
+          "delta_hns": 1.8931443891229414,
+          "baseline_complete": true
+        },
+        {
+          "seed": 3090,
+          "score": 18303.0,
+          "delta_hns": 0.06013021830716201,
+          "baseline_complete": true
+        }
+      ]
+    },
+    "up_n_down": {
+      "attempts": 1,
+      "completed": 1,
+      "successful_pairs": 1,
+      "latest": {
+        "seed": 3090,
+        "status": "complete",
+        "stage": null
+      },
+      "top": [
+        {
+          "seed": 3090,
+          "score": 13402.9,
+          "delta_hns": 0.5676433691756272,
           "baseline_complete": true
         }
       ]

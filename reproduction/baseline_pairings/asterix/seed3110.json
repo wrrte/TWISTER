@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "kind": "reused_baseline_cross_seed",
+  "game": "asterix",
+  "full_flash_seed": 3110,
+  "full_flash_score": 1032.0,
+  "baseline": {
+    "seed": 9997,
+    "score": 1374.5,
+    "enabled": true,
+    "run_ids": [
+      "153qwcr7"
+    ],
+    "run_names": [
+      "callbacks/asterix_seed9997/atari100k-asterix"
+    ],
+    "run_urls": [
+      "https://wandb.ai/choemj-kaist/nnet/runs/153qwcr7"
+    ]
+  },
+  "gate": {
+    "accepted": true,
+    "individual_passes": true,
+    "mean_passes": false,
+    "previous_pair_seeds": [
+      3090,
+      3100
+    ],
+    "mean_score": 1192.8333333333333,
+    "mean_hns": 0.11851360585232525,
+    "minimum_mean_score": 2135.3
+  },
+  "search_id": "search_2adad0c4cf444365b65e08b887d07bed",
+  "server": "a"
+}

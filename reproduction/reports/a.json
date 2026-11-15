@@ -2,41 +2,59 @@
   "version": 1,
   "server": "a",
   "search_id": "search_2adad0c4cf444365b65e08b887d07bed",
-  "round": 2,
-  "updated_at": "2026-11-11T07:48:03+00:00",
+  "round": 4,
+  "updated_at": "2026-11-15T03:41:26+00:00",
   "games": {
     "alien": {
-      "attempts": 2,
-      "completed": 1,
-      "successful_pairs": 1,
+      "attempts": 3,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3100,
-        "status": "running",
-        "stage": "baseline"
+        "seed": 3110,
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
           "seed": 3100,
           "score": 1452.1,
           "delta_hns": 0.0698695652173913,
-          "baseline_complete": false
+          "baseline_complete": true
         },
         {
           "seed": 3090,
           "score": 881.1,
           "delta_hns": -0.01288405797101449,
           "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 787.8,
+          "delta_hns": -0.02640579710144928,
+          "baseline_complete": true
         }
       ]
     },
     "amidar": {
-      "attempts": 2,
-      "completed": 1,
-      "successful_pairs": 1,
+      "attempts": 3,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3100,
-        "status": "running",
-        "stage": "full_flash"
+        "seed": 3110,
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
@@ -44,17 +62,35 @@
           "score": 213.78,
           "delta_hns": 0.01737456242707118,
           "baseline_complete": true
+        },
+        {
+          "seed": 3100,
+          "score": 179.32,
+          "delta_hns": -0.0027304550758459785,
+          "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 158.78,
+          "delta_hns": -0.014714119019836639,
+          "baseline_complete": true
         }
       ]
     },
     "assault": {
-      "attempts": 2,
-      "completed": 1,
-      "successful_pairs": 1,
+      "attempts": 3,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3100,
-        "status": "running",
-        "stage": "full_flash"
+        "seed": 3110,
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
@@ -62,15 +98,33 @@
           "score": 925.09,
           "delta_hns": 0.3924807692307693,
           "baseline_complete": true
+        },
+        {
+          "seed": 3100,
+          "score": 850.29,
+          "delta_hns": 0.24863461538461532,
+          "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 731.42,
+          "delta_hns": 0.02003846153846146,
+          "baseline_complete": true
         }
       ]
     },
     "asterix": {
-      "attempts": 2,
-      "completed": 2,
-      "successful_pairs": 2,
+      "attempts": 3,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "complete",
         "stage": "done"
       },
@@ -86,15 +140,27 @@
           "score": 1182.5,
           "delta_hns": -0.014892077655854334,
           "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 1032.0,
+          "delta_hns": -0.03303991317979019,
+          "baseline_complete": true
         }
       ]
     },
     "bank_heist": {
-      "attempts": 2,
-      "completed": 2,
-      "successful_pairs": 2,
+      "attempts": 3,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "complete",
         "stage": "done"
       },
@@ -106,6 +172,12 @@
           "baseline_complete": true
         },
         {
+          "seed": 3110,
+          "score": 1222.7,
+          "delta_hns": 0.3798376184032477,
+          "baseline_complete": true
+        },
+        {
           "seed": 3100,
           "score": 965.1,
           "delta_hns": 0.031258457374830885,
@@ -114,11 +186,17 @@
       ]
     },
     "battle_zone": {
-      "attempts": 2,
-      "completed": 2,
-      "successful_pairs": 2,
+      "attempts": 3,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "complete",
         "stage": "done"
       },
@@ -134,55 +212,106 @@
           "score": 13330.0,
           "delta_hns": 0.09790972780521419,
           "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 9070.0,
+          "delta_hns": -0.024405650625933157,
+          "baseline_complete": true
         }
       ]
     },
     "boxing": {
-      "attempts": 1,
-      "completed": 1,
-      "successful_pairs": 1,
+      "attempts": 3,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3090,
+        "seed": 3110,
         "status": "complete",
         "stage": "done"
       },
       "top": [
+        {
+          "seed": 3110,
+          "score": 97.67,
+          "delta_hns": 0.8058333333333335,
+          "baseline_complete": true
+        },
         {
           "seed": 3090,
           "score": 95.36,
           "delta_hns": 0.6133333333333333,
           "baseline_complete": true
+        },
+        {
+          "seed": 3100,
+          "score": 94.75,
+          "delta_hns": 0.5625,
+          "baseline_complete": true
         }
       ]
     },
     "breakout": {
-      "attempts": 1,
-      "completed": 1,
-      "successful_pairs": 0,
+      "attempts": 4,
+      "completed": 3,
+      "successful_pairs": 1,
+      "successful_pair_seeds": [
+        3100
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3090,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3120,
+        "status": "interrupted",
+        "stage": "warmup"
       },
       "top": [
+        {
+          "seed": 3100,
+          "score": 35.08,
+          "delta_hns": 0.0028571428571427964,
+          "baseline_complete": true
+        },
         {
           "seed": 3090,
           "score": 24.7,
           "delta_hns": -0.3678571428571429,
           "baseline_complete": false
+        },
+        {
+          "seed": 3110,
+          "score": 19.03,
+          "delta_hns": -0.5703571428571428,
+          "baseline_complete": false
         }
       ]
     },
     "chopper_command": {
-      "attempts": 1,
-      "completed": 1,
-      "successful_pairs": 1,
+      "attempts": 3,
+      "completed": 2,
+      "successful_pairs": 2,
+      "successful_pair_seeds": [
+        3090,
+        3100
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3090,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3110,
+        "status": "running",
+        "stage": "full_flash"
       },
       "top": [
+        {
+          "seed": 3100,
+          "score": 1192.0,
+          "delta_hns": 0.042876691500684204,
+          "baseline_complete": true
+        },
         {
           "seed": 3090,
           "score": 657.0,
@@ -192,15 +321,25 @@
       ]
     },
     "crazy_climber": {
-      "attempts": 1,
-      "completed": 1,
-      "successful_pairs": 0,
+      "attempts": 3,
+      "completed": 2,
+      "successful_pairs": 1,
+      "successful_pair_seeds": [
+        3100
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3090,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3110,
+        "status": "running",
+        "stage": "full_flash"
       },
       "top": [
+        {
+          "seed": 3100,
+          "score": 86369.0,
+          "delta_hns": 0.17920875084833726,
+          "baseline_complete": true
+        },
         {
           "seed": 3090,
           "score": 69244.0,
@@ -210,19 +349,82 @@
       ]
     },
     "demon_attack": {
-      "attempts": 1,
-      "completed": 0,
-      "successful_pairs": 0,
+      "attempts": 3,
+      "completed": 2,
+      "successful_pairs": 2,
+      "successful_pair_seeds": [
+        3090,
+        3100
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3090,
+        "seed": 3110,
         "status": "running",
-        "stage": "baseline"
+        "stage": "full_flash"
       },
       "top": [
+        {
+          "seed": 3100,
+          "score": 397.5,
+          "delta_hns": 0.05964815832875206,
+          "baseline_complete": true
+        },
         {
           "seed": 3090,
           "score": 280.35,
           "delta_hns": -0.004755360087960406,
+          "baseline_complete": true
+        }
+      ]
+    },
+    "gopher": {
+      "attempts": 3,
+      "completed": 2,
+      "successful_pairs": 0,
+      "successful_pair_seeds": [],
+      "pending_full_flash": [],
+      "latest": {
+        "seed": 3111,
+        "status": "running",
+        "stage": "warmup"
+      },
+      "top": [
+        {
+          "seed": 3091,
+          "score": 1918.4,
+          "delta_hns": -9.431569173630454,
+          "baseline_complete": false
+        },
+        {
+          "seed": 3101,
+          "score": 1790.4,
+          "delta_hns": -9.490993500464253,
+          "baseline_complete": false
+        }
+      ]
+    },
+    "krull": {
+      "attempts": 3,
+      "completed": 2,
+      "successful_pairs": 0,
+      "successful_pair_seeds": [],
+      "pending_full_flash": [],
+      "latest": {
+        "seed": 3111,
+        "status": "running",
+        "stage": "warmup"
+      },
+      "top": [
+        {
+          "seed": 3101,
+          "score": 7664.3,
+          "delta_hns": -1.0999063670411984,
+          "baseline_complete": false
+        },
+        {
+          "seed": 3091,
+          "score": 7639.9,
+          "delta_hns": -1.1227528089887644,
           "baseline_complete": false
         }
       ]

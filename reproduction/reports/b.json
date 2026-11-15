@@ -2,13 +2,19 @@
   "version": 1,
   "server": "b",
   "search_id": "search_55ef5d85540b44deb4e3af0ae3b0ecc8",
-  "round": 4,
-  "updated_at": "2026-11-13T01:29:36+00:00",
+  "round": 6,
+  "updated_at": "2026-11-15T03:41:43+00:00",
   "games": {
     "frostbite": {
       "attempts": 3,
       "completed": 3,
       "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
         "seed": 3110,
         "status": "complete",
@@ -39,6 +45,12 @@
       "attempts": 3,
       "completed": 3,
       "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
         "seed": 3110,
         "status": "complete",
@@ -66,15 +78,26 @@
       ]
     },
     "jamesbond": {
-      "attempts": 3,
-      "completed": 3,
-      "successful_pairs": 1,
+      "attempts": 6,
+      "completed": 5,
+      "successful_pairs": 2,
+      "successful_pair_seeds": [
+        3090,
+        3130
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3110,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3140,
+        "status": "running",
+        "stage": "warmup"
       },
       "top": [
+        {
+          "seed": 3130,
+          "score": 722.0,
+          "delta_hns": 0.5437956204379562,
+          "baseline_complete": true
+        },
         {
           "seed": 3090,
           "score": 588.0,
@@ -88,21 +111,25 @@
           "baseline_complete": false
         },
         {
-          "seed": 3110,
-          "score": 161.0,
-          "delta_hns": -1.5036496350364963,
+          "seed": 3120,
+          "score": 422.0,
+          "delta_hns": -0.551094890510949,
           "baseline_complete": false
         }
       ]
     },
     "kangaroo": {
-      "attempts": 3,
-      "completed": 3,
+      "attempts": 5,
+      "completed": 4,
       "successful_pairs": 1,
+      "successful_pair_seeds": [
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3110,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3130,
+        "status": "running",
+        "stage": "full_flash"
       },
       "top": [
         {
@@ -122,19 +149,35 @@
           "score": 2134.0,
           "delta_hns": -1.3013744552463962,
           "baseline_complete": false
+        },
+        {
+          "seed": 3120,
+          "score": 1182.0,
+          "delta_hns": -1.6205162587998658,
+          "baseline_complete": false
         }
       ]
     },
     "krull": {
-      "attempts": 3,
-      "completed": 3,
-      "successful_pairs": 0,
+      "attempts": 5,
+      "completed": 4,
+      "successful_pairs": 1,
+      "successful_pair_seeds": [
+        3120
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3110,
-        "status": "complete",
-        "stage": "done"
+        "seed": 3130,
+        "status": "running",
+        "stage": "warmup"
       },
       "top": [
+        {
+          "seed": 3120,
+          "score": 9102.0,
+          "delta_hns": 0.24625468164794007,
+          "baseline_complete": true
+        },
         {
           "seed": 3100,
           "score": 7600.9,
@@ -156,13 +199,18 @@
       ]
     },
     "kung_fu_master": {
-      "attempts": 3,
-      "completed": 2,
-      "successful_pairs": 1,
+      "attempts": 5,
+      "completed": 4,
+      "successful_pairs": 2,
+      "successful_pair_seeds": [
+        3100,
+        3120
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3110,
+        "seed": 3130,
         "status": "running",
-        "stage": "full_flash"
+        "stage": "warmup"
       },
       "top": [
         {
@@ -172,21 +220,39 @@
           "baseline_complete": true
         },
         {
+          "seed": 3120,
+          "score": 25190.0,
+          "delta_hns": 0.07776492570513391,
+          "baseline_complete": true
+        },
+        {
           "seed": 3090,
           "score": 17918.0,
           "delta_hns": -0.24575140137022866,
+          "baseline_complete": false
+        },
+        {
+          "seed": 3110,
+          "score": 14702.0,
+          "delta_hns": -0.38882462852566957,
           "baseline_complete": false
         }
       ]
     },
     "ms_pacman": {
       "attempts": 3,
-      "completed": 2,
-      "successful_pairs": 2,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
         "seed": 3110,
-        "status": "running",
-        "stage": "full_flash"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
@@ -200,23 +266,47 @@
           "score": 2161.5,
           "delta_hns": -0.006696764484574868,
           "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 1808.2,
+          "delta_hns": -0.059864559819413084,
+          "baseline_complete": true
         }
       ]
     },
     "pong": {
-      "attempts": 3,
-      "completed": 2,
-      "successful_pairs": 1,
+      "attempts": 4,
+      "completed": 4,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3110,
+        3120
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3110,
-        "status": "running",
-        "stage": "full_flash"
+        "seed": 3120,
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
           "seed": 3090,
           "score": 20.89,
           "delta_hns": 0.02472222222222224,
+          "baseline_complete": true
+        },
+        {
+          "seed": 3120,
+          "score": 20.83,
+          "delta_hns": 0.02305555555555551,
+          "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 19.09,
+          "delta_hns": -0.02527777777777778,
           "baseline_complete": true
         },
         {
@@ -229,16 +319,28 @@
     },
     "private_eye": {
       "attempts": 3,
-      "completed": 2,
-      "successful_pairs": 2,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
         "seed": 3110,
-        "status": "running",
-        "stage": "full_flash"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
         {
           "seed": 3090,
+          "score": 100.0,
+          "delta_hns": -0.021683490064130215,
+          "baseline_complete": true
+        },
+        {
+          "seed": 3110,
           "score": 100.0,
           "delta_hns": -0.021683490064130215,
           "baseline_complete": true
@@ -253,14 +355,26 @@
     },
     "qbert": {
       "attempts": 3,
-      "completed": 2,
-      "successful_pairs": 2,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
         "seed": 3110,
-        "status": "running",
-        "stage": "full_flash"
+        "status": "complete",
+        "stage": "done"
       },
       "top": [
+        {
+          "seed": 3110,
+          "score": 4254.5,
+          "delta_hns": 0.07956511925363027,
+          "baseline_complete": true
+        },
         {
           "seed": 3100,
           "score": 3820.25,
@@ -276,11 +390,16 @@
       ]
     },
     "freeway": {
-      "attempts": 3,
-      "completed": 2,
+      "attempts": 5,
+      "completed": 4,
       "successful_pairs": 2,
+      "successful_pair_seeds": [
+        3090,
+        3100
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3110,
+        "seed": 3130,
         "status": "running",
         "stage": "warmup"
       },
@@ -296,17 +415,35 @@
           "score": 30.82,
           "delta_hns": -0.039333333333333324,
           "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 0.0,
+          "delta_hns": -1.0666666666666667,
+          "baseline_complete": false
+        },
+        {
+          "seed": 3120,
+          "score": 0.0,
+          "delta_hns": -1.0666666666666667,
+          "baseline_complete": false
         }
       ]
     },
     "road_runner": {
-      "attempts": 2,
-      "completed": 2,
-      "successful_pairs": 2,
+      "attempts": 3,
+      "completed": 3,
+      "successful_pairs": 3,
+      "successful_pair_seeds": [
+        3090,
+        3100,
+        3110
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3100,
+        "seed": 3110,
         "status": "complete",
-        "stage": null
+        "stage": "done"
       },
       "top": [
         {
@@ -320,15 +457,26 @@
           "score": 18303.0,
           "delta_hns": 0.06013021830716201,
           "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 16252.0,
+          "delta_hns": -0.2017107110940891,
+          "baseline_complete": true
         }
       ]
     },
     "up_n_down": {
-      "attempts": 2,
-      "completed": 1,
-      "successful_pairs": 1,
+      "attempts": 5,
+      "completed": 3,
+      "successful_pairs": 2,
+      "successful_pair_seeds": [
+        3090,
+        3100
+      ],
+      "pending_full_flash": [],
       "latest": {
-        "seed": 3100,
+        "seed": 3130,
         "status": "running",
         "stage": "warmup"
       },
@@ -338,6 +486,50 @@
           "score": 13402.9,
           "delta_hns": 0.5676433691756272,
           "baseline_complete": true
+        },
+        {
+          "seed": 3100,
+          "score": 6036.2,
+          "delta_hns": -0.0924551971326165,
+          "baseline_complete": true
+        },
+        {
+          "seed": 3110,
+          "score": 3387.4,
+          "delta_hns": -0.32980286738351255,
+          "baseline_complete": false
+        }
+      ]
+    },
+    "gopher": {
+      "attempts": 5,
+      "completed": 3,
+      "successful_pairs": 0,
+      "successful_pair_seeds": [],
+      "pending_full_flash": [],
+      "latest": {
+        "seed": 3092,
+        "status": "running",
+        "stage": "warmup"
+      },
+      "top": [
+        {
+          "seed": 3100,
+          "score": 8059.4,
+          "delta_hns": -6.580594243268338,
+          "baseline_complete": false
+        },
+        {
+          "seed": 3090,
+          "score": 2911.0,
+          "delta_hns": -8.970752089136491,
+          "baseline_complete": false
+        },
+        {
+          "seed": 3110,
+          "score": 2213.6,
+          "delta_hns": -9.29452181987001,
+          "baseline_complete": false
         }
       ]
     }

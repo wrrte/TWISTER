@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "kind": "reused_baseline_cross_seed",
+  "game": "road_runner",
+  "full_flash_seed": 3110,
+  "full_flash_score": 16252.0,
+  "baseline": {
+    "seed": 9998,
+    "score": 23434.0,
+    "enabled": true,
+    "run_ids": [
+      "6pn495jh"
+    ],
+    "run_names": [
+      "callbacks/road_runner_seed9998/atari100k-road_runner"
+    ],
+    "run_urls": [
+      "https://wandb.ai/choemj-kaist/nnet/runs/6pn495jh"
+    ]
+  },
+  "gate": {
+    "accepted": true,
+    "individual_passes": false,
+    "mean_passes": true,
+    "previous_pair_seeds": [
+      3090,
+      3100
+    ],
+    "mean_score": 22405.333333333332,
+    "mean_hns": 2.858845057236478,
+    "minimum_mean_score": 18615.3
+  },
+  "search_id": "search_55ef5d85540b44deb4e3af0ae3b0ecc8",
+  "server": "b"
+}

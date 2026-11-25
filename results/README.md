@@ -176,6 +176,43 @@ Excel 평균 열은 `Mean (시드 수 맞춤)`으로 표시하고, 셀 메모에
 Excel과 동일하게 모든 ON 설정을 포함한 최솟값에 맞춥니다. ON 설정이 없는 게임은
 기존처럼 Excel에서 OFF의 모든 유효 시드로 평균하고, TeX 비교에서는 제외합니다.
 
+## main performance에 사용한 게임·시드별 점수를 Excel로 저장
+
+`export_seed_scores.py`는 `update_tex.py`의 점수 선택 함수를 그대로 사용하여,
+`episode_score_matcher/input_scores_matched.xlsx`와 같은 형태의 새 파일을 만듭니다.
+TWISTER의 `baseline`에는 OFF 점수를, `flash`에는 ON 점수를 넣으며, 실제 시드 번호와
+무관하게 선택된 순서대로 `1~5` 칸에 저장합니다. 점수는 반올림하지 않고,
+남는 칸과 비교 대상이 없는 게임은 빈칸으로 둡니다. 실제 시드 번호는 셀 메모에 남깁니다.
+5개를 초과하는 경우 점수를 버리지 않고 오류로 알립니다.
+
+다른 GPU에서 얻은 확정 점수 쌍은 `external_scores.json`에서 읽습니다. 해당 게임은
+CSV 선택 결과 대신 이 파일의 baseline/flash 배열을 주어진 순서대로 사용하며,
+Mean과 하단 지표에도 포함합니다. 현재 Gopher는 사용자가 2026-11-16에 제공한
+`(9682.2, 8059.4)`, `(33627.2, 38020.2)`, `(4795.8, 2213.6)` 세 쌍을 사용합니다.
+실제 학습 시드 번호는 제공되지 않아 미기재로 남기고, 출처를 셀 메모에 기록합니다.
+이 외부 점수는 기본 모드와 `--all-seed` 모두에 적용됩니다.
+
+TWISTER 루트에서 실행:
+
+```bash
+python results/export_seed_scores.py
+
+# update_tex.py --all-seed와 같은 점수 선택
+python results/export_seed_scores.py --all-seed --output ../episode_score_matcher/input_scores_twister_all_seed.xlsx
+```
+
+기본 출력은 `episode_score_matcher/input_scores_twister.xlsx`입니다. `--csv`,
+`--run-overrides`, `--on-config`, `--baseline-pairings`, `--all-seed`는 `update_tex.py`와
+같은 의미입니다. `--template`과 `--output`으로 양식 파일과 출력 경로를 지정할 수 있습니다.
+모든 기본 경로는 실행 위치와 무관하게 스크립트 위치를 기준으로 정합니다.
+외부 점수 파일은 `--external-scores PATH`로 바꿀 수 있으며, 빈 JSON 객체 `{}`가
+담긴 파일을 지정하면 CSV 점수만 사용합니다.
+
+TWISTER의 Mean과 하단 지표도 다시 계산하며, 지표의 Random/Human 기준은
+`--tex`(기본 `iclr2027_conference.tex`)에서 읽습니다. STORM/DRAMA 시트는 템플릿의
+기존 내용을 유지합니다. 입력 Excel·CSV·TeX는 수정하지 않습니다. `openpyxl`이 필요하며,
+기본 Python에 없다면 `miniconda3/envs/twister/bin/python`으로 실행할 수 있습니다.
+
 ## 누락된 Atari100k 학습을 TITAN 큐에 추가
 
 ```bash

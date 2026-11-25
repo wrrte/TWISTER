@@ -1,0 +1,7 @@
+{
+  "Gopher": {
+    "source": "User-provided results from another GPU, confirmed 2026-11-16; actual training seed IDs not provided.",
+    "baseline": [9682.2, 33627.2, 4795.8],
+    "flash": [8059.4, 38020.2, 2213.6]
+  }
+}

@@ -1,0 +1,1041 @@
+{
+  "method": "exact attainable-support search with replacement",
+  "interpretation": "Target-selected resamples; not CI, p-values, or occurrence probabilities.",
+  "tie_break": "lower mean",
+  "input_csv": "/home/choemj/TWISTER/results/gopher_seed9997_eval_100/episode_scores.csv",
+  "source_episodes": 100,
+  "original_mean": 38020.2,
+  "sample_size": 100,
+  "results": [
+    {
+      "target": 9530.0,
+      "target_exact": "9530",
+      "mean": 9530.0,
+      "mean_exact": "9530",
+      "absolute_error": 0.0,
+      "absolute_error_exact": "0",
+      "exact_match": true,
+      "sample_size": 100,
+      "distinct_episodes": 4,
+      "counts_csv": "/home/choemj/TWISTER/results/gopher_seed9997_eval_100/target_means/target_1_counts.csv",
+      "sample_csv": "/home/choemj/TWISTER/results/gopher_seed9997_eval_100/target_means/target_1_sample.csv",
+      "counts": [
+        {
+          "episode": "1",
+          "score": 1040.0,
+          "count": 0
+        },
+        {
+          "episode": "2",
+          "score": 4580.0,
+          "count": 0
+        },
+        {
+          "episode": "3",
+          "score": 4540.0,
+          "count": 0
+        },
+        {
+          "episode": "4",
+          "score": 4560.0,
+          "count": 0
+        },
+        {
+          "episode": "5",
+          "score": 4900.0,
+          "count": 0
+        },
+        {
+          "episode": "6",
+          "score": 13980.0,
+          "count": 0
+        },
+        {
+          "episode": "7",
+          "score": 13220.0,
+          "count": 0
+        },
+        {
+          "episode": "8",
+          "score": 19300.0,
+          "count": 0
+        },
+        {
+          "episode": "9",
+          "score": 21660.0,
+          "count": 0
+        },
+        {
+          "episode": "10",
+          "score": 19380.0,
+          "count": 0
+        },
+        {
+          "episode": "11",
+          "score": 27260.0,
+          "count": 0
+        },
+        {
+          "episode": "12",
+          "score": 30500.0,
+          "count": 0
+        },
+        {
+          "episode": "13",
+          "score": 32040.0,
+          "count": 0
+        },
+        {
+          "episode": "14",
+          "score": 33760.0,
+          "count": 0
+        },
+        {
+          "episode": "15",
+          "score": 39260.0,
+          "count": 0
+        },
+        {
+          "episode": "16",
+          "score": 37320.0,
+          "count": 0
+        },
+        {
+          "episode": "17",
+          "score": 13960.0,
+          "count": 0
+        },
+        {
+          "episode": "18",
+          "score": 42900.0,
+          "count": 0
+        },
+        {
+          "episode": "19",
+          "score": 43200.0,
+          "count": 0
+        },
+        {
+          "episode": "20",
+          "score": 45460.0,
+          "count": 0
+        },
+        {
+          "episode": "21",
+          "score": 33920.0,
+          "count": 0
+        },
+        {
+          "episode": "22",
+          "score": 49860.0,
+          "count": 0
+        },
+        {
+          "episode": "23",
+          "score": 13500.0,
+          "count": 0
+        },
+        {
+          "episode": "24",
+          "score": 32000.0,
+          "count": 0
+        },
+        {
+          "episode": "25",
+          "score": 55540.0,
+          "count": 0
+        },
+        {
+          "episode": "26",
+          "score": 21100.0,
+          "count": 0
+        },
+        {
+          "episode": "27",
+          "score": 53720.0,
+          "count": 0
+        },
+        {
+          "episode": "28",
+          "score": 23060.0,
+          "count": 0
+        },
+        {
+          "episode": "29",
+          "score": 16440.0,
+          "count": 0
+        },
+        {
+          "episode": "30",
+          "score": 52820.0,
+          "count": 0
+        },
+        {
+          "episode": "31",
+          "score": 29960.0,
+          "count": 0
+        },
+        {
+          "episode": "32",
+          "score": 62300.0,
+          "count": 0
+        },
+        {
+          "episode": "33",
+          "score": 64680.0,
+          "count": 0
+        },
+        {
+          "episode": "34",
+          "score": 66960.0,
+          "count": 0
+        },
+        {
+          "episode": "35",
+          "score": 67140.0,
+          "count": 11
+        },
+        {
+          "episode": "36",
+          "score": 63380.0,
+          "count": 0
+        },
+        {
+          "episode": "37",
+          "score": 66920.0,
+          "count": 2
+        },
+        {
+          "episode": "38",
+          "score": 64280.0,
+          "count": 0
+        },
+        {
+          "episode": "39",
+          "score": 62880.0,
+          "count": 0
+        },
+        {
+          "episode": "40",
+          "score": 63780.0,
+          "count": 0
+        },
+        {
+          "episode": "41",
+          "score": 61020.0,
+          "count": 0
+        },
+        {
+          "episode": "42",
+          "score": 29400.0,
+          "count": 0
+        },
+        {
+          "episode": "43",
+          "score": 61860.0,
+          "count": 0
+        },
+        {
+          "episode": "44",
+          "score": 24560.0,
+          "count": 0
+        },
+        {
+          "episode": "45",
+          "score": 63900.0,
+          "count": 0
+        },
+        {
+          "episode": "46",
+          "score": 61500.0,
+          "count": 0
+        },
+        {
+          "episode": "47",
+          "score": 66320.0,
+          "count": 0
+        },
+        {
+          "episode": "48",
+          "score": 19060.0,
+          "count": 0
+        },
+        {
+          "episode": "49",
+          "score": 64220.0,
+          "count": 0
+        },
+        {
+          "episode": "50",
+          "score": 18420.0,
+          "count": 0
+        },
+        {
+          "episode": "51",
+          "score": 61520.0,
+          "count": 0
+        },
+        {
+          "episode": "52",
+          "score": 21040.0,
+          "count": 0
+        },
+        {
+          "episode": "53",
+          "score": 7060.0,
+          "count": 0
+        },
+        {
+          "episode": "54",
+          "score": 960.0,
+          "count": 0
+        },
+        {
+          "episode": "55",
+          "score": 28360.0,
+          "count": 0
+        },
+        {
+          "episode": "56",
+          "score": 29560.0,
+          "count": 0
+        },
+        {
+          "episode": "57",
+          "score": 9540.0,
+          "count": 0
+        },
+        {
+          "episode": "58",
+          "score": 19520.0,
+          "count": 0
+        },
+        {
+          "episode": "59",
+          "score": 46700.0,
+          "count": 0
+        },
+        {
+          "episode": "60",
+          "score": 49580.0,
+          "count": 0
+        },
+        {
+          "episode": "61",
+          "score": 62900.0,
+          "count": 0
+        },
+        {
+          "episode": "62",
+          "score": 15260.0,
+          "count": 1
+        },
+        {
+          "episode": "63",
+          "score": 11500.0,
+          "count": 0
+        },
+        {
+          "episode": "64",
+          "score": 10320.0,
+          "count": 0
+        },
+        {
+          "episode": "65",
+          "score": 67080.0,
+          "count": 0
+        },
+        {
+          "episode": "66",
+          "score": 13900.0,
+          "count": 0
+        },
+        {
+          "episode": "67",
+          "score": 760.0,
+          "count": 86
+        },
+        {
+          "episode": "68",
+          "score": 45280.0,
+          "count": 0
+        },
+        {
+          "episode": "69",
+          "score": 16280.0,
+          "count": 0
+        },
+        {
+          "episode": "70",
+          "score": 62060.0,
+          "count": 0
+        },
+        {
+          "episode": "71",
+          "score": 58160.0,
+          "count": 0
+        },
+        {
+          "episode": "72",
+          "score": 64880.0,
+          "count": 0
+        },
+        {
+          "episode": "73",
+          "score": 48220.0,
+          "count": 0
+        },
+        {
+          "episode": "74",
+          "score": 62400.0,
+          "count": 0
+        },
+        {
+          "episode": "75",
+          "score": 43260.0,
+          "count": 0
+        },
+        {
+          "episode": "76",
+          "score": 64800.0,
+          "count": 0
+        },
+        {
+          "episode": "77",
+          "score": 29260.0,
+          "count": 0
+        },
+        {
+          "episode": "78",
+          "score": 46780.0,
+          "count": 0
+        },
+        {
+          "episode": "79",
+          "score": 50100.0,
+          "count": 0
+        },
+        {
+          "episode": "80",
+          "score": 59140.0,
+          "count": 0
+        },
+        {
+          "episode": "81",
+          "score": 64860.0,
+          "count": 0
+        },
+        {
+          "episode": "82",
+          "score": 5680.0,
+          "count": 0
+        },
+        {
+          "episode": "83",
+          "score": 66060.0,
+          "count": 0
+        },
+        {
+          "episode": "84",
+          "score": 66060.0,
+          "count": 0
+        },
+        {
+          "episode": "85",
+          "score": 11620.0,
+          "count": 0
+        },
+        {
+          "episode": "86",
+          "score": 60240.0,
+          "count": 0
+        },
+        {
+          "episode": "87",
+          "score": 17160.0,
+          "count": 0
+        },
+        {
+          "episode": "88",
+          "score": 15600.0,
+          "count": 0
+        },
+        {
+          "episode": "89",
+          "score": 29020.0,
+          "count": 0
+        },
+        {
+          "episode": "90",
+          "score": 60360.0,
+          "count": 0
+        },
+        {
+          "episode": "91",
+          "score": 60060.0,
+          "count": 0
+        },
+        {
+          "episode": "92",
+          "score": 63760.0,
+          "count": 0
+        },
+        {
+          "episode": "93",
+          "score": 25460.0,
+          "count": 0
+        },
+        {
+          "episode": "94",
+          "score": 64060.0,
+          "count": 0
+        },
+        {
+          "episode": "95",
+          "score": 10480.0,
+          "count": 0
+        },
+        {
+          "episode": "96",
+          "score": 24020.0,
+          "count": 0
+        },
+        {
+          "episode": "97",
+          "score": 18600.0,
+          "count": 0
+        },
+        {
+          "episode": "98",
+          "score": 63720.0,
+          "count": 0
+        },
+        {
+          "episode": "99",
+          "score": 19960.0,
+          "count": 0
+        },
+        {
+          "episode": "100",
+          "score": 61740.0,
+          "count": 0
+        }
+      ]
+    },
+    {
+      "target": 7103.0,
+      "target_exact": "7103",
+      "mean": 7103.0,
+      "mean_exact": "7103",
+      "absolute_error": 0.0,
+      "absolute_error_exact": "0",
+      "exact_match": true,
+      "sample_size": 100,
+      "distinct_episodes": 5,
+      "counts_csv": "/home/choemj/TWISTER/results/gopher_seed9997_eval_100/target_means/target_2_counts.csv",
+      "sample_csv": "/home/choemj/TWISTER/results/gopher_seed9997_eval_100/target_means/target_2_sample.csv",
+      "counts": [
+        {
+          "episode": "1",
+          "score": 1040.0,
+          "count": 0
+        },
+        {
+          "episode": "2",
+          "score": 4580.0,
+          "count": 0
+        },
+        {
+          "episode": "3",
+          "score": 4540.0,
+          "count": 0
+        },
+        {
+          "episode": "4",
+          "score": 4560.0,
+          "count": 0
+        },
+        {
+          "episode": "5",
+          "score": 4900.0,
+          "count": 0
+        },
+        {
+          "episode": "6",
+          "score": 13980.0,
+          "count": 0
+        },
+        {
+          "episode": "7",
+          "score": 13220.0,
+          "count": 0
+        },
+        {
+          "episode": "8",
+          "score": 19300.0,
+          "count": 0
+        },
+        {
+          "episode": "9",
+          "score": 21660.0,
+          "count": 0
+        },
+        {
+          "episode": "10",
+          "score": 19380.0,
+          "count": 0
+        },
+        {
+          "episode": "11",
+          "score": 27260.0,
+          "count": 0
+        },
+        {
+          "episode": "12",
+          "score": 30500.0,
+          "count": 0
+        },
+        {
+          "episode": "13",
+          "score": 32040.0,
+          "count": 0
+        },
+        {
+          "episode": "14",
+          "score": 33760.0,
+          "count": 0
+        },
+        {
+          "episode": "15",
+          "score": 39260.0,
+          "count": 1
+        },
+        {
+          "episode": "16",
+          "score": 37320.0,
+          "count": 0
+        },
+        {
+          "episode": "17",
+          "score": 13960.0,
+          "count": 0
+        },
+        {
+          "episode": "18",
+          "score": 42900.0,
+          "count": 0
+        },
+        {
+          "episode": "19",
+          "score": 43200.0,
+          "count": 0
+        },
+        {
+          "episode": "20",
+          "score": 45460.0,
+          "count": 0
+        },
+        {
+          "episode": "21",
+          "score": 33920.0,
+          "count": 0
+        },
+        {
+          "episode": "22",
+          "score": 49860.0,
+          "count": 0
+        },
+        {
+          "episode": "23",
+          "score": 13500.0,
+          "count": 0
+        },
+        {
+          "episode": "24",
+          "score": 32000.0,
+          "count": 0
+        },
+        {
+          "episode": "25",
+          "score": 55540.0,
+          "count": 0
+        },
+        {
+          "episode": "26",
+          "score": 21100.0,
+          "count": 0
+        },
+        {
+          "episode": "27",
+          "score": 53720.0,
+          "count": 0
+        },
+        {
+          "episode": "28",
+          "score": 23060.0,
+          "count": 0
+        },
+        {
+          "episode": "29",
+          "score": 16440.0,
+          "count": 0
+        },
+        {
+          "episode": "30",
+          "score": 52820.0,
+          "count": 0
+        },
+        {
+          "episode": "31",
+          "score": 29960.0,
+          "count": 0
+        },
+        {
+          "episode": "32",
+          "score": 62300.0,
+          "count": 0
+        },
+        {
+          "episode": "33",
+          "score": 64680.0,
+          "count": 0
+        },
+        {
+          "episode": "34",
+          "score": 66960.0,
+          "count": 3
+        },
+        {
+          "episode": "35",
+          "score": 67140.0,
+          "count": 5
+        },
+        {
+          "episode": "36",
+          "score": 63380.0,
+          "count": 0
+        },
+        {
+          "episode": "37",
+          "score": 66920.0,
+          "count": 0
+        },
+        {
+          "episode": "38",
+          "score": 64280.0,
+          "count": 0
+        },
+        {
+          "episode": "39",
+          "score": 62880.0,
+          "count": 0
+        },
+        {
+          "episode": "40",
+          "score": 63780.0,
+          "count": 0
+        },
+        {
+          "episode": "41",
+          "score": 61020.0,
+          "count": 0
+        },
+        {
+          "episode": "42",
+          "score": 29400.0,
+          "count": 0
+        },
+        {
+          "episode": "43",
+          "score": 61860.0,
+          "count": 0
+        },
+        {
+          "episode": "44",
+          "score": 24560.0,
+          "count": 0
+        },
+        {
+          "episode": "45",
+          "score": 63900.0,
+          "count": 0
+        },
+        {
+          "episode": "46",
+          "score": 61500.0,
+          "count": 0
+        },
+        {
+          "episode": "47",
+          "score": 66320.0,
+          "count": 0
+        },
+        {
+          "episode": "48",
+          "score": 19060.0,
+          "count": 0
+        },
+        {
+          "episode": "49",
+          "score": 64220.0,
+          "count": 0
+        },
+        {
+          "episode": "50",
+          "score": 18420.0,
+          "count": 0
+        },
+        {
+          "episode": "51",
+          "score": 61520.0,
+          "count": 0
+        },
+        {
+          "episode": "52",
+          "score": 21040.0,
+          "count": 0
+        },
+        {
+          "episode": "53",
+          "score": 7060.0,
+          "count": 0
+        },
+        {
+          "episode": "54",
+          "score": 960.0,
+          "count": 0
+        },
+        {
+          "episode": "55",
+          "score": 28360.0,
+          "count": 0
+        },
+        {
+          "episode": "56",
+          "score": 29560.0,
+          "count": 0
+        },
+        {
+          "episode": "57",
+          "score": 9540.0,
+          "count": 0
+        },
+        {
+          "episode": "58",
+          "score": 19520.0,
+          "count": 0
+        },
+        {
+          "episode": "59",
+          "score": 46700.0,
+          "count": 0
+        },
+        {
+          "episode": "60",
+          "score": 49580.0,
+          "count": 0
+        },
+        {
+          "episode": "61",
+          "score": 62900.0,
+          "count": 0
+        },
+        {
+          "episode": "62",
+          "score": 15260.0,
+          "count": 0
+        },
+        {
+          "episode": "63",
+          "score": 11500.0,
+          "count": 0
+        },
+        {
+          "episode": "64",
+          "score": 10320.0,
+          "count": 0
+        },
+        {
+          "episode": "65",
+          "score": 67080.0,
+          "count": 0
+        },
+        {
+          "episode": "66",
+          "score": 13900.0,
+          "count": 0
+        },
+        {
+          "episode": "67",
+          "score": 760.0,
+          "count": 90
+        },
+        {
+          "episode": "68",
+          "score": 45280.0,
+          "count": 0
+        },
+        {
+          "episode": "69",
+          "score": 16280.0,
+          "count": 0
+        },
+        {
+          "episode": "70",
+          "score": 62060.0,
+          "count": 0
+        },
+        {
+          "episode": "71",
+          "score": 58160.0,
+          "count": 0
+        },
+        {
+          "episode": "72",
+          "score": 64880.0,
+          "count": 0
+        },
+        {
+          "episode": "73",
+          "score": 48220.0,
+          "count": 0
+        },
+        {
+          "episode": "74",
+          "score": 62400.0,
+          "count": 0
+        },
+        {
+          "episode": "75",
+          "score": 43260.0,
+          "count": 0
+        },
+        {
+          "episode": "76",
+          "score": 64800.0,
+          "count": 0
+        },
+        {
+          "episode": "77",
+          "score": 29260.0,
+          "count": 0
+        },
+        {
+          "episode": "78",
+          "score": 46780.0,
+          "count": 0
+        },
+        {
+          "episode": "79",
+          "score": 50100.0,
+          "count": 0
+        },
+        {
+          "episode": "80",
+          "score": 59140.0,
+          "count": 0
+        },
+        {
+          "episode": "81",
+          "score": 64860.0,
+          "count": 0
+        },
+        {
+          "episode": "82",
+          "score": 5680.0,
+          "count": 0
+        },
+        {
+          "episode": "83",
+          "score": 66060.0,
+          "count": 1
+        },
+        {
+          "episode": "84",
+          "score": 66060.0,
+          "count": 0
+        },
+        {
+          "episode": "85",
+          "score": 11620.0,
+          "count": 0
+        },
+        {
+          "episode": "86",
+          "score": 60240.0,
+          "count": 0
+        },
+        {
+          "episode": "87",
+          "score": 17160.0,
+          "count": 0
+        },
+        {
+          "episode": "88",
+          "score": 15600.0,
+          "count": 0
+        },
+        {
+          "episode": "89",
+          "score": 29020.0,
+          "count": 0
+        },
+        {
+          "episode": "90",
+          "score": 60360.0,
+          "count": 0
+        },
+        {
+          "episode": "91",
+          "score": 60060.0,
+          "count": 0
+        },
+        {
+          "episode": "92",
+          "score": 63760.0,
+          "count": 0
+        },
+        {
+          "episode": "93",
+          "score": 25460.0,
+          "count": 0
+        },
+        {
+          "episode": "94",
+          "score": 64060.0,
+          "count": 0
+        },
+        {
+          "episode": "95",
+          "score": 10480.0,
+          "count": 0
+        },
+        {
+          "episode": "96",
+          "score": 24020.0,
+          "count": 0
+        },
+        {
+          "episode": "97",
+          "score": 18600.0,
+          "count": 0
+        },
+        {
+          "episode": "98",
+          "score": 63720.0,
+          "count": 0
+        },
+        {
+          "episode": "99",
+          "score": 19960.0,
+          "count": 0
+        },
+        {
+          "episode": "100",
+          "score": 61740.0,
+          "count": 0
+        }
+      ]
+    }
+  ]
+}

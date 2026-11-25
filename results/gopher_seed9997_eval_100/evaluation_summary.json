@@ -1,0 +1,701 @@
+{
+  "status": "complete",
+  "env_name": "atari100k-gopher",
+  "seed": 9997,
+  "checkpoint": "/home/choemj/TWISTER/callbacks/gopher_seed9997/atari100k-gopher/checkpoints_epoch_50_step_100000.ckpt",
+  "model_step": 100000,
+  "retrieval_enabled": false,
+  "episodes": 100,
+  "num_envs": 32,
+  "training_num_envs": 4,
+  "environment_seeds": [
+    10001,
+    10002,
+    10003,
+    10004,
+    10005,
+    10006,
+    10007,
+    10008,
+    10009,
+    10010,
+    10011,
+    10012,
+    10013,
+    10014,
+    10015,
+    10016,
+    10017,
+    10018,
+    10019,
+    10020,
+    10021,
+    10022,
+    10023,
+    10024,
+    10025,
+    10026,
+    10027,
+    10028,
+    10029,
+    10030,
+    10031,
+    10032
+  ],
+  "episode_order": "completion order across parallel environments",
+  "frames_definition": "evaluator steps metric: emulator frames, action repeat included",
+  "time_limit_frames": 108000,
+  "env_params": {
+    "game": "gopher",
+    "history_frames": 1,
+    "img_size": [
+      64,
+      64
+    ],
+    "action_repeat": 4,
+    "grayscale_obs": false,
+    "noop_max": 30,
+    "repeat_action_probability": 0.0,
+    "full_action_space": false
+  },
+  "override_config": {
+    "seed": 9997,
+    "retrieval_enabled": false,
+    "num_envs": 4,
+    "eval_during_training": false,
+    "eval_episodes": 5,
+    "num_eval_envs": 5,
+    "final_eval_enabled": true,
+    "final_eval_episodes": 100,
+    "final_eval_num_envs": 32,
+    "retrieval": {
+      "warmup_steps": 50000,
+      "trigger_mode": "z_score",
+      "z_score_threshold": 3.5,
+      "batch_size_reduction": "retrieved"
+    },
+    "eval_env_backend": "process",
+    "load_replay_buffer_state_dict": false
+  },
+  "device": "cuda",
+  "gpu": "NVIDIA TITAN RTX",
+  "torch_version": "2.0.1+cu117",
+  "started_at_utc": "2026-11-16T06:25:00.712353+00:00",
+  "finished_at_utc": "2026-11-16T06:30:27.150519+00:00",
+  "elapsed_seconds": 326.43817019904964,
+  "metrics": {
+    "score": 38020.2,
+    "steps": 64741.32
+  },
+  "score_statistics": {
+    "mean": 38020.2,
+    "std_sample": 22064.143130446017,
+    "median": 35620.0,
+    "min": 760.0,
+    "max": 67140.0
+  },
+  "episode_scores": [
+    1040.0,
+    4580.0,
+    4540.0,
+    4560.0,
+    4900.0,
+    13980.0,
+    13220.0,
+    19300.0,
+    21660.0,
+    19380.0,
+    27260.0,
+    30500.0,
+    32040.0,
+    33760.0,
+    39260.0,
+    37320.0,
+    13960.0,
+    42900.0,
+    43200.0,
+    45460.0,
+    33920.0,
+    49860.0,
+    13500.0,
+    32000.0,
+    55540.0,
+    21100.0,
+    53720.0,
+    23060.0,
+    16440.0,
+    52820.0,
+    29960.0,
+    62300.0,
+    64680.0,
+    66960.0,
+    67140.0,
+    63380.0,
+    66920.0,
+    64280.0,
+    62880.0,
+    63780.0,
+    61020.0,
+    29400.0,
+    61860.0,
+    24560.0,
+    63900.0,
+    61500.0,
+    66320.0,
+    19060.0,
+    64220.0,
+    18420.0,
+    61520.0,
+    21040.0,
+    7060.0,
+    960.0,
+    28360.0,
+    29560.0,
+    9540.0,
+    19520.0,
+    46700.0,
+    49580.0,
+    62900.0,
+    15260.0,
+    11500.0,
+    10320.0,
+    67080.0,
+    13900.0,
+    760.0,
+    45280.0,
+    16280.0,
+    62060.0,
+    58160.0,
+    64880.0,
+    48220.0,
+    62400.0,
+    43260.0,
+    64800.0,
+    29260.0,
+    46780.0,
+    50100.0,
+    59140.0,
+    64860.0,
+    5680.0,
+    66060.0,
+    66060.0,
+    11620.0,
+    60240.0,
+    17160.0,
+    15600.0,
+    29020.0,
+    60360.0,
+    60060.0,
+    63760.0,
+    25460.0,
+    64060.0,
+    10480.0,
+    24020.0,
+    18600.0,
+    63720.0,
+    19960.0,
+    61740.0
+  ],
+  "episode_results": [
+    {
+      "episode": 1,
+      "score": 1040.0,
+      "frames": 4700
+    },
+    {
+      "episode": 2,
+      "score": 4580.0,
+      "frames": 9504
+    },
+    {
+      "episode": 3,
+      "score": 4540.0,
+      "frames": 10152
+    },
+    {
+      "episode": 4,
+      "score": 4560.0,
+      "frames": 11112
+    },
+    {
+      "episode": 5,
+      "score": 4900.0,
+      "frames": 11680
+    },
+    {
+      "episode": 6,
+      "score": 13980.0,
+      "frames": 23784
+    },
+    {
+      "episode": 7,
+      "score": 13220.0,
+      "frames": 23824
+    },
+    {
+      "episode": 8,
+      "score": 19300.0,
+      "frames": 32560
+    },
+    {
+      "episode": 9,
+      "score": 21660.0,
+      "frames": 33720
+    },
+    {
+      "episode": 10,
+      "score": 19380.0,
+      "frames": 33964
+    },
+    {
+      "episode": 11,
+      "score": 27260.0,
+      "frames": 47348
+    },
+    {
+      "episode": 12,
+      "score": 30500.0,
+      "frames": 49504
+    },
+    {
+      "episode": 13,
+      "score": 32040.0,
+      "frames": 56012
+    },
+    {
+      "episode": 14,
+      "score": 33760.0,
+      "frames": 56924
+    },
+    {
+      "episode": 15,
+      "score": 39260.0,
+      "frames": 59496
+    },
+    {
+      "episode": 16,
+      "score": 37320.0,
+      "frames": 66192
+    },
+    {
+      "episode": 17,
+      "score": 13960.0,
+      "frames": 22976
+    },
+    {
+      "episode": 18,
+      "score": 42900.0,
+      "frames": 69868
+    },
+    {
+      "episode": 19,
+      "score": 43200.0,
+      "frames": 73000
+    },
+    {
+      "episode": 20,
+      "score": 45460.0,
+      "frames": 79960
+    },
+    {
+      "episode": 21,
+      "score": 33920.0,
+      "frames": 57380
+    },
+    {
+      "episode": 22,
+      "score": 49860.0,
+      "frames": 81780
+    },
+    {
+      "episode": 23,
+      "score": 13500.0,
+      "frames": 24792
+    },
+    {
+      "episode": 24,
+      "score": 32000.0,
+      "frames": 54872
+    },
+    {
+      "episode": 25,
+      "score": 55540.0,
+      "frames": 88620
+    },
+    {
+      "episode": 26,
+      "score": 21100.0,
+      "frames": 39352
+    },
+    {
+      "episode": 27,
+      "score": 53720.0,
+      "frames": 89556
+    },
+    {
+      "episode": 28,
+      "score": 23060.0,
+      "frames": 37368
+    },
+    {
+      "episode": 29,
+      "score": 16440.0,
+      "frames": 28844
+    },
+    {
+      "episode": 30,
+      "score": 52820.0,
+      "frames": 95072
+    },
+    {
+      "episode": 31,
+      "score": 29960.0,
+      "frames": 49284
+    },
+    {
+      "episode": 32,
+      "score": 62300.0,
+      "frames": 108000
+    },
+    {
+      "episode": 33,
+      "score": 64680.0,
+      "frames": 108000
+    },
+    {
+      "episode": 34,
+      "score": 66960.0,
+      "frames": 108000
+    },
+    {
+      "episode": 35,
+      "score": 67140.0,
+      "frames": 108000
+    },
+    {
+      "episode": 36,
+      "score": 63380.0,
+      "frames": 108000
+    },
+    {
+      "episode": 37,
+      "score": 66920.0,
+      "frames": 108000
+    },
+    {
+      "episode": 38,
+      "score": 64280.0,
+      "frames": 108000
+    },
+    {
+      "episode": 39,
+      "score": 62880.0,
+      "frames": 108000
+    },
+    {
+      "episode": 40,
+      "score": 63780.0,
+      "frames": 108000
+    },
+    {
+      "episode": 41,
+      "score": 61020.0,
+      "frames": 108000
+    },
+    {
+      "episode": 42,
+      "score": 29400.0,
+      "frames": 53984
+    },
+    {
+      "episode": 43,
+      "score": 61860.0,
+      "frames": 108000
+    },
+    {
+      "episode": 44,
+      "score": 24560.0,
+      "frames": 44312
+    },
+    {
+      "episode": 45,
+      "score": 63900.0,
+      "frames": 108000
+    },
+    {
+      "episode": 46,
+      "score": 61500.0,
+      "frames": 108000
+    },
+    {
+      "episode": 47,
+      "score": 66320.0,
+      "frames": 108000
+    },
+    {
+      "episode": 48,
+      "score": 19060.0,
+      "frames": 31940
+    },
+    {
+      "episode": 49,
+      "score": 64220.0,
+      "frames": 108000
+    },
+    {
+      "episode": 50,
+      "score": 18420.0,
+      "frames": 33404
+    },
+    {
+      "episode": 51,
+      "score": 61520.0,
+      "frames": 108000
+    },
+    {
+      "episode": 52,
+      "score": 21040.0,
+      "frames": 38240
+    },
+    {
+      "episode": 53,
+      "score": 7060.0,
+      "frames": 15076
+    },
+    {
+      "episode": 54,
+      "score": 960.0,
+      "frames": 4432
+    },
+    {
+      "episode": 55,
+      "score": 28360.0,
+      "frames": 49996
+    },
+    {
+      "episode": 56,
+      "score": 29560.0,
+      "frames": 50544
+    },
+    {
+      "episode": 57,
+      "score": 9540.0,
+      "frames": 17188
+    },
+    {
+      "episode": 58,
+      "score": 19520.0,
+      "frames": 35440
+    },
+    {
+      "episode": 59,
+      "score": 46700.0,
+      "frames": 74988
+    },
+    {
+      "episode": 60,
+      "score": 49580.0,
+      "frames": 84144
+    },
+    {
+      "episode": 61,
+      "score": 62900.0,
+      "frames": 108000
+    },
+    {
+      "episode": 62,
+      "score": 15260.0,
+      "frames": 26416
+    },
+    {
+      "episode": 63,
+      "score": 11500.0,
+      "frames": 19404
+    },
+    {
+      "episode": 64,
+      "score": 10320.0,
+      "frames": 17264
+    },
+    {
+      "episode": 65,
+      "score": 67080.0,
+      "frames": 108000
+    },
+    {
+      "episode": 66,
+      "score": 13900.0,
+      "frames": 23264
+    },
+    {
+      "episode": 67,
+      "score": 760.0,
+      "frames": 4448
+    },
+    {
+      "episode": 68,
+      "score": 45280.0,
+      "frames": 75200
+    },
+    {
+      "episode": 69,
+      "score": 16280.0,
+      "frames": 27852
+    },
+    {
+      "episode": 70,
+      "score": 62060.0,
+      "frames": 106044
+    },
+    {
+      "episode": 71,
+      "score": 58160.0,
+      "frames": 98780
+    },
+    {
+      "episode": 72,
+      "score": 64880.0,
+      "frames": 105900
+    },
+    {
+      "episode": 73,
+      "score": 48220.0,
+      "frames": 82768
+    },
+    {
+      "episode": 74,
+      "score": 62400.0,
+      "frames": 103536
+    },
+    {
+      "episode": 75,
+      "score": 43260.0,
+      "frames": 72300
+    },
+    {
+      "episode": 76,
+      "score": 64800.0,
+      "frames": 108000
+    },
+    {
+      "episode": 77,
+      "score": 29260.0,
+      "frames": 47288
+    },
+    {
+      "episode": 78,
+      "score": 46780.0,
+      "frames": 81248
+    },
+    {
+      "episode": 79,
+      "score": 50100.0,
+      "frames": 87304
+    },
+    {
+      "episode": 80,
+      "score": 59140.0,
+      "frames": 108000
+    },
+    {
+      "episode": 81,
+      "score": 64860.0,
+      "frames": 108000
+    },
+    {
+      "episode": 82,
+      "score": 5680.0,
+      "frames": 12264
+    },
+    {
+      "episode": 83,
+      "score": 66060.0,
+      "frames": 108000
+    },
+    {
+      "episode": 84,
+      "score": 66060.0,
+      "frames": 108000
+    },
+    {
+      "episode": 85,
+      "score": 11620.0,
+      "frames": 20500
+    },
+    {
+      "episode": 86,
+      "score": 60240.0,
+      "frames": 100708
+    },
+    {
+      "episode": 87,
+      "score": 17160.0,
+      "frames": 29236
+    },
+    {
+      "episode": 88,
+      "score": 15600.0,
+      "frames": 27224
+    },
+    {
+      "episode": 89,
+      "score": 29020.0,
+      "frames": 49028
+    },
+    {
+      "episode": 90,
+      "score": 60360.0,
+      "frames": 104720
+    },
+    {
+      "episode": 91,
+      "score": 60060.0,
+      "frames": 108000
+    },
+    {
+      "episode": 92,
+      "score": 63760.0,
+      "frames": 108000
+    },
+    {
+      "episode": 93,
+      "score": 25460.0,
+      "frames": 44500
+    },
+    {
+      "episode": 94,
+      "score": 64060.0,
+      "frames": 108000
+    },
+    {
+      "episode": 95,
+      "score": 10480.0,
+      "frames": 19304
+    },
+    {
+      "episode": 96,
+      "score": 24020.0,
+      "frames": 40760
+    },
+    {
+      "episode": 97,
+      "score": 18600.0,
+      "frames": 31192
+    },
+    {
+      "episode": 98,
+      "score": 63720.0,
+      "frames": 108000
+    },
+    {
+      "episode": 99,
+      "score": 19960.0,
+      "frames": 34792
+    },
+    {
+      "episode": 100,
+      "score": 61740.0,
+      "frames": 108000
+    }
+  ]
+}
